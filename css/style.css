@@ -1,0 +1,77 @@
+/* Reset mínimo: sem margens nem barras de rolagem, o canvas ocupa a janela inteira. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #120d0a; /* mesma cor do "vazio" fora do mapa, evita flashes no resize */
+  color: #f3e9d8;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  /* Centraliza o canvas; com 100vw x 100vh ele preenche tudo, mas se no futuro
+     travarmos uma proporção (ex.: 16:9 com letterbox) ele continua centrado. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: crosshair;
+  /* Impede seleção/gestos do navegador durante cliques rápidos de combo. */
+  user-select: none;
+  touch-action: none;
+}
+
+#hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  background: rgba(18, 13, 10, 0.72);
+  border-left: 3px solid #b3202a;
+  font-size: 13px;
+  line-height: 1.6;
+  pointer-events: none; /* o mouse "atravessa" o HUD e chega ao canvas */
+}
+
+#hud h1 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+#hud h1 span {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+#hud ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-right: 2px;
+  padding: 0 4px;
+  border: 1px solid rgba(243, 233, 216, 0.35);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: center;
+}

@@ -4,37 +4,35 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Rōnin — A Relíquia Roubada</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@400;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <!-- O jogo inteiro é desenhado neste único canvas, que ocupa a janela toda. -->
+  <!-- O jogo inteiro (mundo, HUD e menus) é desenhado neste canvas. -->
   <canvas id="game"></canvas>
 
-  <!-- HUD em HTML (sobreposto ao canvas). Textos/menus ficam mais nítidos no DOM. -->
-  <div id="hud">
-    <h1>Rōnin <span>— A Relíquia Roubada</span></h1>
-    <ul>
-      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / setas — mover</li>
-      <li><kbd>Mouse</kbd> — mirar</li>
-      <li><kbd>Clique esq.</kbd> — corte (clique em ritmo para combo de 3 golpes)</li>
-      <li><kbd>Espaço</kbd> / <kbd>Shift</kbd> — dash (esquiva, cancela ataques)</li>
-      <li><kbd>F3</kbd> — debug de hitboxes</li>
-    </ul>
-  </div>
-
   <!--
-    Scripts clássicos (não ES modules) para que o jogo rode abrindo o index.html
-    direto no navegador (file://), sem precisar de servidor local.
-    A ORDEM IMPORTA: cada arquivo usa o que foi declarado nos anteriores.
+    Scripts clássicos (não ES modules) para rodar abrindo o index.html direto
+    no navegador (file://), sem servidor. A ORDEM IMPORTA.
   -->
   <script src="js/config.js"></script>
+  <script src="js/atlas.js"></script>
   <script src="js/iso.js"></script>
   <script src="js/input.js"></script>
+  <script src="js/assets.js"></script>
+  <script src="js/audio.js"></script>
   <script src="js/camera.js"></script>
   <script src="js/effects.js"></script>
   <script src="js/combat.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/actor.js"></script>
   <script src="js/player.js"></script>
-  <script src="js/dummy.js"></script>
+  <script src="js/enemies.js"></script>
+  <script src="js/boss.js"></script>
+  <script src="js/stages.js"></script>
+  <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

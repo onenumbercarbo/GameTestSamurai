@@ -1,14 +1,11 @@
 /**
  * input.js — Estado de teclado e mouse.
  *
- * Usamos `event.code` (tecla FÍSICA) em vez de `event.key`, então WASD funciona
- * na mesma posição em teclados ABNT2, AZERTY, Dvorak etc.
- *
- * - down:    teclas seguradas agora.
- * - pressed: teclas que foram pressionadas desde o último frame simulado
- *            (para ações "de borda", como dash).
- * - Cliques de ataque vão para uma pequena FILA; o sistema de combo consome.
- *   Isso evita perder cliques rápidos que caem entre dois frames.
+ * Usamos `event.code` (tecla FÍSICA), então WASD funciona na mesma posição em
+ * teclados ABNT2, AZERTY etc.
+ *  - down:    teclas seguradas agora
+ *  - pressed: teclas apertadas desde o último frame simulado (ações "de borda")
+ *  - cliques de ataque vão para uma fila curta consumida pelo combo
  */
 class Input {
   constructor(canvas) {
@@ -16,33 +13,41 @@ class Input {
     this.pressed = new Set();
     this.mouse = { x: 0, y: 0, inside: false };
     this.attackPresses = 0;
-    this.debugToggled = false;
+    this.clicked = false; // clique para menus/telas
+    this.onFirstGesture = null;
 
-    const blocked = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F3']);
+    const blocked = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F3', 'Tab']);
+    const gesture = () => {
+      if (this.onFirstGesture) {
+        this.onFirstGesture();
+        this.onFirstGesture = null;
+      }
+    };
 
     window.addEventListener('keydown', (e) => {
       if (blocked.has(e.code)) e.preventDefault();
-      if (e.code === 'F3' && !e.repeat) this.debugToggled = true;
+      gesture();
       if (!this.down.has(e.code)) this.pressed.add(e.code);
       this.down.add(e.code);
     });
-
     window.addEventListener('keyup', (e) => this.down.delete(e.code));
-
-    // Se a janela perde o foco com uma tecla segurada, o keyup nunca chega.
     window.addEventListener('blur', () => this.down.clear());
 
-    canvas.addEventListener('mousemove', (e) => {
+    const setMouse = (e) => {
       const r = canvas.getBoundingClientRect();
       this.mouse.x = e.clientX - r.left;
       this.mouse.y = e.clientY - r.top;
       this.mouse.inside = true;
-    });
+    };
+    canvas.addEventListener('mousemove', setMouse);
     canvas.addEventListener('mouseleave', () => (this.mouse.inside = false));
-
     canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) this.attackPresses++;
-      // Botão direito reservado para golpe pesado / defesa no futuro.
+      setMouse(e);
+      gesture();
+      if (e.button === 0) {
+        this.attackPresses++;
+        this.clicked = true;
+      }
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
@@ -55,7 +60,6 @@ class Input {
     return codes.some((c) => this.pressed.has(c));
   }
 
-  /** Retorna true (e consome) se houve ao menos um clique de ataque pendente. */
   consumeAttack() {
     if (this.attackPresses > 0) {
       this.attackPresses--;
@@ -64,16 +68,23 @@ class Input {
     return false;
   }
 
-  consumeDebugToggle() {
-    const t = this.debugToggled;
-    this.debugToggled = false;
-    return t;
+  /** Confirmar em menus: Enter, Espaço ou clique. */
+  consumeConfirm() {
+    const ok = this.wasPressed('Enter', 'NumpadEnter', 'Space') || this.clicked;
+    if (ok) this.flush();
+    return ok;
   }
 
-  /** Chamado ao fim de cada frame SIMULADO (não durante hit-stop). */
+  /** Descarta entradas pendentes (ex.: o clique que fechou um menu não vira golpe). */
+  flush() {
+    this.pressed.clear();
+    this.attackPresses = 0;
+    this.clicked = false;
+  }
+
   endFrame() {
     this.pressed.clear();
-    // Limita a fila para que "spam" de cliques não gere 10 golpes atrasados.
+    this.clicked = false;
     this.attackPresses = Math.min(this.attackPresses, 1);
   }
 }

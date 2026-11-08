@@ -1,40 +1,62 @@
 # Rōnin — A Relíquia Roubada
 
 Hack and slash isométrico para navegador (HTML5 Canvas + JavaScript puro), ambientado no Japão da Era Meiji.
+Um rōnin atravessa cinco locais para recuperar o Espelho da Lua, roubado pelo clã Kurokama, e enfrenta o líder do clã num duelo final.
 
-## Como rodar
+## Como jogar
 
-Abra `index.html` no navegador. Não precisa de build nem de servidor (os scripts são clássicos, não ES modules).
+Abra `index.html` no navegador. Não precisa de build nem de servidor.
 
-## Controles
-
-| Ação | Tecla |
+| Ação | Controle |
 |---|---|
 | Mover | `W` `A` `S` `D` / setas |
 | Mirar | Mouse |
-| Corte (combo de 3 golpes) | Clique esquerdo |
-| Dash (esquiva, cancela ataque) | `Espaço` / `Shift` |
-| Debug de hitboxes | `F3` |
+| Corte (combo de 3 golpes: Kesa-giri → Gyaku-kesa → giro Enten-giri) | Clique esquerdo |
+| Dash (esquiva invulnerável, cancela ataques) | `Espaço` / `Shift` |
+| Investida (ataque logo após o dash) | Dash + clique |
+| Pausa / Som / Debug | `Esc` ou `P` / `M` / `F3` |
+
+## Jornada
+
+1. **Aldeia de Kiriyama**: a aldeia incendiada (tutorial).
+2. **Vila de Hanamura**: vila das cerejeiras, com batedores ágeis.
+3. **Floresta de Bambu de Sagino**: assassinos que arremessam kunais, que podem ser rebatidas com a espada.
+4. **Kurogane**: o acampamento do clã.
+5. **Santuário de Kurokama**: luta contra **Gendō, o Ceifador**. Ataques telegrafados no chão (ceifada, giro 360°, salto com impacto, investida); fase 2 com fúria, onda de choque e reforços; sistema de postura.
+
+## Câmera cinematográfica
+
+A câmera é dirigida por planos pré-definidos (`directCamera` em `js/main.js`):
+
+- **Exploração**: plano fechado, levemente à frente de onde o rōnin anda e mira.
+- **Arena**: ao entrar num encontro, a câmera trava num plano fixo do centro da arena.
+- **Duelo**: no boss, o plano enquadra os dois lutadores e aproxima quando eles chegam perto.
+- **Cutscenes**: plano de estabelecimento de cada vila, apresentação do boss e final, com faixas de cinema.
+
+Como a arte é isométrica fixa, "ângulo" aqui significa enquadramento, zoom e posição. Girar a câmera exigiria sprites desenhados em várias vistas.
 
 ## Estrutura
 
 ```
-index.html        canvas + HUD e ordem de carregamento dos scripts
-css/style.css     canvas em tela cheia, centralizado
-js/config.js      constantes de tuning (tiles, velocidades, dash, buffer de input)
-js/iso.js         projeção cartesiano <-> isométrico (com a matemática comentada)
-js/input.js       teclado (event.code) e mouse; fila de cliques de ataque
-js/camera.js      câmera seguindo o jogador + screen shake
-js/effects.js     arco da espada projetado no mundo, faíscas, números de dano
-js/combat.js      ComboSystem + COMBO_CHAIN (golpes como dados) e roadmap de combos
-js/player.js      Rōnin placeholder: movimento, dash, afterimages, katana
-js/dummy.js       bonecos de treino (alvo para testar ataque em área)
-js/main.js        game loop (requestAnimationFrame), grid, ordenação por profundidade, hit-stop
+index.html                 canvas + ordem de carregamento dos scripts
+assets/sprites/*.png       sprites recortados (gerados)
+tools/extract_sprites.py   recorta as folhas com fundo verde → PNGs + js/atlas.js
+tools/contact_sheet.py     prancha de conferência dos recortes e âncoras
+js/config.js               tuning (velocidades, câmera, fichas de ataque)
+js/atlas.js                tamanho e ponto de apoio (pés) de cada sprite (gerado)
+js/iso.js                  projeção cartesiano ↔ isométrico (matemática comentada)
+js/camera.js               câmera com zoom, alvo, shake, letterbox e área segura
+js/level.js                chão, props com colisores tirados do sprite, campo de fluxo da IA, ordenação de profundidade
+js/combat.js               ComboSystem, golpes como dados, ramo dash→investida, hitSector
+js/player.js / enemies.js / boss.js   rōnin, ninjas (3 tipos), kunais, itens e o chefe
+js/stages.js               as 5 fases como dados (caminho, casas, ondas, história)
+js/ui.js / main.js         HUD, telas, cutscenes, diretor de câmera e game loop
 ```
 
-## Próximos passos
+### Regerar os sprites
 
-- Saqueadores com IA (perseguir, cercar, atacar) usando a mesma interface de alvo dos bonecos.
-- Árvore de combos (leve/pesado/ataque após dash), descrita no topo de `js/combat.js`.
-- Sprites em 8 direções escolhidos por `player.facing` e `player.state`.
-- Tilemap com obstáculos e colisão; cenários: vilarejo, floresta de bambu, acampamento.
+```bash
+python3 tools/extract_sprites.py caminho/folha_boss.jpg caminho/folha_heroi.jpg
+```
+
+Requer Pillow e NumPy. Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.

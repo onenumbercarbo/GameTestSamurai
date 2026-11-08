@@ -7,31 +7,38 @@
  *  - "Tela" (screen): pixels CSS. Só a renderização conhece esse espaço.
  */
 const CONFIG = {
-  // Tamanho de UM tile isométrico na tela. Proporção 2:1 é o padrão do
-  // "isométrico de jogos" (tecnicamente projeção dimétrica): a linha diagonal
-  // de um tile sobe 1px a cada 2px na horizontal (~26.57°), o que dá bordas
-  // sem serrilhado em pixel art. Visualmente é a "câmera a 45°" de Hades/Diablo.
+  // Tamanho de UM tile isométrico na tela com zoom 1. Proporção 2:1 é o padrão
+  // do "isométrico de jogos" (tecnicamente dimétrico, linhas a ~26.57°) — a
+  // "câmera a 45°" de Hades/Diablo.
   TILE_W: 64,
   TILE_H: 32,
 
-  // Dimensões do mapa de teste em tiles.
-  MAP_W: 28,
-  MAP_H: 28,
+  // Escala dos sprites de personagem (PNG -> tela com zoom 1).
+  SPRITE_SCALE: 0.56,
+  BOSS_SCALE: 0.7,
 
-  // Delta-time máximo por frame (s). Se a aba ficar em segundo plano, o
-  // navegador pausa o rAF; ao voltar, dt seria enorme e o jogador "teleportaria".
   DT_MAX: 1 / 30,
 
   PLAYER: {
-    speed: 5.2,          // tiles/segundo
-    radius: 0.32,        // raio de colisão (tiles)
-    dashSpeed: 19,       // tiles/segundo durante o dash
-    dashDuration: 0.15,  // segundos
-    dashCooldown: 0.42,  // segundos
-    accel: 22,           // quão rápido a velocidade alcança o alvo (suaviza partidas/paradas)
+    maxHp: 100,
+    speed: 5.0,          // tiles/s
+    radius: 0.3,
+    dashSpeed: 17,
+    dashDuration: 0.16,
+    dashCooldown: 0.45,
+    accel: 22,
+    hurtIFrames: 0.7,    // invulnerabilidade após levar dano
   },
 
-  // Janela de "input buffer": um clique feito um pouco ANTES do golpe atual
-  // permitir encadear ainda é aceito. Essencial para combos fluidos.
+  // Câmera cinematográfica: perto do jogador, com planos pré-definidos.
+  CAMERA: {
+    exploreZoom: 1.75,   // plano fechado durante a exploração
+    lookAhead: 0.9,      // tiles de antecipação na direção da mira
+    arenaZoom: 1.4,      // plano fixo de arena durante as ondas
+    arenaLean: 0.22,
+    safeArea: 0.34,      // o jogador nunca sai desta fração da tela (a partir do centro)
+  },
+
   INPUT_BUFFER: 0.28,
+  MAX_ATTACKERS: 2,      // quantos inimigos podem atacar ao mesmo tempo (estilo GoW)
 };

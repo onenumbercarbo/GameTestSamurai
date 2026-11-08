@@ -72,7 +72,10 @@ FRAMES = {
     'house_thatch': (2, 0, 604, 478, 1084, {'keep_all_inner': True, 'clip': [(440, 620, 478, 762)]}),
     'sakura': (2, 438, 626, 642, 870, {'clip': [(575, 715, 642, 870)]}),
     'lantern': (2, 452, 864, 524, 1002, {}),
-    'house_tile': (2, 552, 610, 990, 990, {'keep_all_inner': True, 'clip': [(552, 610, 642, 742), (552, 742, 578, 880)]}),
+    # Casa com as duas cercas de bambu: recorte vai até o pé das cercas (y≈1092);
+    # a lanterna entre elas é removida; o apoio é o canto sul da CASA (740, 980).
+    'house_tile': (2, 548, 610, 990, 1096, {'keep_all_inner': True, 'anchor': (740, 980),
+                   'clip': [(548, 610, 642, 742), (548, 742, 578, 880), (728, 962, 806, 1100)]}),
     'lantern2': (2, 732, 966, 804, 1098, {}),
     'house_tile2': (2, 1000, 616, 1440, 1094, {'keep_all_inner': True, 'clip': [(1270, 985, 1440, 1094), (1404, 778, 1440, 985), (1426, 715, 1440, 778)]}),
     'bamboo': (2, 1512, 612, 1720, 934, {}),
@@ -161,7 +164,10 @@ def extract(sheet, x0, y0, x1, y1, opts, character=False):
     by0, by1, bx0, bx1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     rgba = np.dstack([col, a * 255])[by0:by1, bx0:bx1].astype(np.uint8)
     solid = (a > 0.5)[by0:by1, bx0:bx1]
-    return Image.fromarray(rgba, 'RGBA'), solid
+    anchor = None
+    if 'anchor' in opts:  # ponto de apoio dado em coordenadas da folha
+        anchor = (opts['anchor'][0] - x0 - bx0, opts['anchor'][1] - y0 - by0)
+    return Image.fromarray(rgba, 'RGBA'), solid, anchor
 
 
 def feet_anchor(solid):
@@ -197,8 +203,8 @@ def main(boss_path, hero_path):
     os.makedirs(OUT, exist_ok=True)
     atlas = {}
     for name, (s, x0, y0, x1, y1, opts) in FRAMES.items():
-        img, solid = extract(sheets[s], x0, y0, x1, y1, opts, name.startswith(CHARACTER_PREFIXES))
-        ax, ay = feet_anchor(solid)
+        img, solid, fixed = extract(sheets[s], x0, y0, x1, y1, opts, name.startswith(CHARACTER_PREFIXES))
+        ax, ay = fixed or feet_anchor(solid)
         if name in ANCHOR_X:
             ax = ANCHOR_X[name] / SCALE
         w, h = img.size

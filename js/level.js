@@ -13,7 +13,9 @@
  */
 const PROP_TYPES = {
   house_thatch: { scale: 0.78, solid: 'box', shrink: 0.86 },
-  house_tile: { scale: 0.78, solid: 'box', shrink: 0.8 },
+  // As cercas desta casa avançam para a frente do canto sul, então o colisor é
+  // dado à mão (relativo ao apoio, em tiles) e cobre casa + cercas.
+  house_tile: { scale: 0.78, solid: 'box', box: [-1.62, -2.26, 1.54, 1.63] },
   house_tile2: { scale: 0.78, solid: 'box', shrink: 0.86 },
   shrine: { scale: 0.85, solid: 'box', shrink: 0.75 },
   sakura: { scale: 0.85, solid: 'circle', r: 0.3 },
@@ -46,7 +48,10 @@ class Prop {
     this.y = y;
     this.fade = 1; // fica translúcido quando esconde o jogador
     this.isProp = true;
-    if (def.solid === 'box') {
+    if (def.box) {
+      const [bx0, by0, bx1, by1] = def.box;
+      this.box = { x0: x + bx0, y0: y + by0, x1: x + bx1, y1: y + by1 };
+    } else if (def.solid === 'box') {
       const left = (m.ax * def.scale) / Iso.HW;
       const right = ((m.w - m.ax) * def.scale) / Iso.HW;
       const fx = left * def.shrink, fy = right * def.shrink;

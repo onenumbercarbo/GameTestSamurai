@@ -80,6 +80,100 @@ const DASH_ATTACK = {
   frames: [[0, 'hero_dash'], [0.08, 'hero_slash1'], [0.26, 'hero_stance']],
 };
 
+/** Ataque pesado (botão direito), liberado pelo Pergaminho do Iaijutsu. */
+const IAI_STRIKE = {
+  name: 'Iai: Raikō',
+  arcDeg: 80, sweep: 1, range: 3.4, thickness: 0.7,
+  damage: 40, knockback: 10, stun: 0.8, poise: 45, finisher: true,
+  lunge: 16, moveMul: 0,
+  activeStart: 0.14, activeEnd: 0.27, chainFrom: Infinity, duration: 0.52, comboWindow: 0,
+  hitStop: 0.12, shake: 11, nextStep: 0,
+  color: [170, 210, 255],
+  frames: [[0, 'hero_stance'], [0.12, 'hero_dash'], [0.2, 'hero_slash1'], [0.4, 'hero_stance']],
+};
+
+/**
+ * Armas e relíquias encontradas explorando as vilas. `apply` altera os
+ * modificadores do jogador; os golpes são reescalados no início de cada swing.
+ */
+const ITEMS = {
+  tamahagane: { name: 'Katana Tamahagane', desc: 'Aço dobrado mil vezes: dano +30%', icon: 'blade', apply: (m) => { m.dmg *= 1.3; } },
+  omamori: { name: 'Omamori de Proteção', desc: 'Amuleto do templo: vida máxima +30', icon: 'charm', apply: (m) => { m.hp += 30; } },
+  nodachi: { name: 'Nodachi do Vento', desc: 'Alcance +25% e o giro final lança uma onda de vento', icon: 'wind', apply: (m) => { m.range *= 1.25; m.wind = true; } },
+  iai: { name: 'Pergaminho do Iaijutsu', desc: 'Botão direito: saque relâmpago que atravessa os inimigos', icon: 'scroll', apply: (m) => { m.iai = true; } },
+};
+
+function computeMods(items) {
+  const m = { dmg: 1, range: 1, hp: 0, wind: false, iai: false };
+  for (const id of items) if (ITEMS[id]) ITEMS[id].apply(m);
+  return m;
+}
+
+/** Cópia do golpe com dano/alcance ajustados pela arma equipada. */
+function scaleDef(def, mods) {
+  if (!mods || (mods.dmg === 1 && mods.range === 1)) return def;
+  return {
+    ...def,
+    damage: Math.round(def.damage * mods.dmg),
+    range: def.range * mods.range,
+    thickness: def.thickness * mods.range,
+  };
+}
+
+/** Onda de vento cortante (Nodachi do Vento): atravessa e acerta cada inimigo uma vez. */
+class WindSlash {
+  constructor(world, x, y, angle, damage) {
+    this.world = world;
+    this.x = x;
+    this.y = y;
+    this.angle = angle;
+    this.speed = 11;
+    this.life = 0.6;
+    this.damage = damage;
+    this.alive = true;
+    this.isProjectile = true;
+    this.hits = new Set();
+    this.radius = 0.2;
+  }
+
+  get box() {
+    return { x0: this.x - 0.3, y0: this.y - 0.3, x1: this.x + 0.3, y1: this.y + 0.3 };
+  }
+
+  update(dt) {
+    this.life -= dt;
+    this.x += Math.cos(this.angle) * this.speed * dt;
+    this.y += Math.sin(this.angle) * this.speed * dt;
+    if (this.life <= 0) { this.alive = false; return; }
+    const w = this.world;
+    const foes = w.targets().filter((t) => !t.isProjectile);
+    const n = hitSector(this.x, this.y, this.angle, 0.9, 360, foes, this.hits, {
+      damage: this.damage, knockback: 5, stun: 0.35, poise: 12, source: this,
+    });
+    if (n > 0) w.camera.shake(3);
+  }
+
+  draw(ctx, cam) {
+    const a = clamp(this.life / 0.6, 0, 1);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(200,240,255,${0.85 * a})`;
+    ctx.lineWidth = 4 * cam.scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= 14; i++) {
+      const t = -0.9 + (i / 14) * 1.8;
+      const r = 0.75;
+      const px = this.x + Math.cos(this.angle + t) * r - Math.cos(this.angle) * 0.5;
+      const py = this.y + Math.sin(this.angle + t) * r - Math.sin(this.angle) * 0.5;
+      const p = cam.worldToScreen(px, py, 22);
+      i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 /**
  * Testa um setor circular contra uma lista de alvos e aplica o golpe.
  * Usado pelo jogador, pelos ninjas e pelo boss.
@@ -154,6 +248,11 @@ class ComboSystem {
       const c = this.current;
       c.t += dt;
       if (c.t >= c.def.activeStart && c.t <= c.def.activeEnd + dt) this._resolveHits(c, owner, targets, world);
+      // Nodachi do Vento: o golpe final dispara uma onda de vento.
+      if (c.def.finisher && owner.mods && owner.mods.wind && !c.wind && c.t >= c.def.activeStart) {
+        c.wind = true;
+        for (const da of [-0.5, 0, 0.5]) world.projectiles.push(new WindSlash(world, owner.x, owner.y, c.aim + da, Math.round(12 * owner.mods.dmg)));
+      }
 
       const canChain = this.step < this.chain.length - 1 && c.t >= c.def.chainFrom;
       if (this.buffer > 0 && canChain) {
@@ -183,8 +282,11 @@ class ComboSystem {
     this.step = stepIndex;
     this.buffer = 0;
     this.windowLeft = 0;
-    // A mira é travada no início do golpe (direção do cursor naquele instante).
-    this.current = { def, t: 0, aim: owner.aimAngle, hits: new Set() };
+    def = scaleDef(def, owner.mods);
+    // A direção é travada no início do golpe: para onde o jogador está
+    // conduzindo (WASD), com assistência de mira para o inimigo mais próximo.
+    const aim = owner.attackAim ? owner.attackAim() : owner.aimAngle;
+    this.current = { def, t: 0, aim, hits: new Set(), wind: false };
     owner.onAttackStart(def, this.current.aim);
     world.effects.spawnSlash(owner, this.current.aim, def);
     Sfx.swing(Math.max(0, stepIndex));

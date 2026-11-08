@@ -7,9 +7,11 @@
  *   dano  -> hero_stance + flash vermelho
  */
 class Player extends Actor {
-  constructor(world, x, y) {
+  constructor(world, x, y, items = []) {
     super(world, x, y, CONFIG.PLAYER.radius);
-    this.maxHp = CONFIG.PLAYER.maxHp;
+    this.items = items;
+    this.mods = computeMods(items); // bônus das armas/relíquias encontradas
+    this.maxHp = CONFIG.PLAYER.maxHp + this.mods.hp;
     this.hp = this.maxHp;
     this.aimAngle = 0;
     this.dashTime = 0;
@@ -21,7 +23,41 @@ class Player extends Actor {
     this.afterimages = [];
     this.afterimageTimer = 0;
     this.deadTime = 0;
+    this.heavyCd = 0;
+    this.moveDir = { x: 0, y: 0 };
     this.combo = new ComboSystem(COMBO_CHAIN);
+  }
+
+  /** Recalcula bônus após pegar um item novo. */
+  equip(id) {
+    if (!this.items.includes(id)) this.items.push(id);
+    const before = this.maxHp;
+    this.mods = computeMods(this.items);
+    this.maxHp = CONFIG.PLAYER.maxHp + this.mods.hp;
+    if (this.maxHp > before) this.hp = this.maxHp;
+  }
+
+  /**
+   * Direção do golpe.
+   *  1. Base: para onde o jogador conduz com WASD; parado, para onde o mouse aponta.
+   *  2. Assistência de mira: se houver inimigo a até 3,2 tiles, gira para ele,
+   *     preferindo os que estão à frente da direção base e mais perto.
+   * Assim o Rōnin sempre corta na direção da luta, mesmo que o cursor tenha
+   * ficado parado do outro lado da tela.
+   */
+  attackAim() {
+    const moving = this.moveDir.x || this.moveDir.y;
+    const base = moving ? Math.atan2(this.moveDir.y, this.moveDir.x) : this.aimAngle;
+    let best = null, bestScore = Infinity;
+    for (const e of this.world.targets()) {
+      if (e.isProjectile || e.isCrate) continue;
+      const dx = e.x - this.x, dy = e.y - this.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 3.2) continue;
+      const score = d + Math.abs(angleDiff(Math.atan2(dy, dx), base)) * 1.6;
+      if (score < bestScore) { bestScore = score; best = e; }
+    }
+    return best ? Math.atan2(best.y - this.y, best.x - this.x) : base;
   }
 
   get invulnerable() {
@@ -97,6 +133,8 @@ class Player extends Actor {
     const sx = locked ? 0 : (input.isDown('KeyD', 'ArrowRight') ? 1 : 0) - (input.isDown('KeyA', 'ArrowLeft') ? 1 : 0);
     const sy = locked ? 0 : (input.isDown('KeyS', 'ArrowDown') ? 1 : 0) - (input.isDown('KeyW', 'ArrowUp') ? 1 : 0);
     const move = Iso.screenDirToWorld(sx, sy);
+    this.moveDir = move;
+    this.heavyCd = Math.max(0, this.heavyCd - dt);
 
     if (this.dashCooldown > 0) this.dashCooldown -= dt;
     if (!locked && input.wasPressed('Space', 'ShiftLeft', 'ShiftRight') && this.dashCooldown <= 0 && this.dashTime <= 0) {
@@ -107,6 +145,12 @@ class Player extends Actor {
       this.kx = this.ky = 0;
       w.effects.smoke(this.x, this.y, 4, '210,200,180', 0.3);
       Sfx.dash();
+    }
+
+    if (!locked && input.consumeHeavy() && this.mods.iai && this.heavyCd <= 0 && this.dashTime <= 0) {
+      this.heavyCd = 2.2;
+      this.combo.startSpecial(IAI_STRIKE, this, w);
+      w.effects.smoke(this.x, this.y, 6, '200,220,255', 0.35);
     }
 
     if (!locked && input.consumeAttack()) {
@@ -134,8 +178,9 @@ class Player extends Actor {
       this.vx = damp(this.vx, move.x * P.speed * mul, P.accel, dt);
       this.vy = damp(this.vy, move.y * P.speed * mul, P.accel, dt);
       if (!this.combo.attacking) {
-        // Corre olhando para onde anda; parado, olha para a mira.
-        this.facing = move.x || move.y ? Math.atan2(move.y, move.x) : this.aimAngle;
+        // Corre olhando para onde anda; parado, só segue o mouse se ele estiver em uso.
+        if (move.x || move.y) this.facing = Math.atan2(move.y, move.x);
+        else if (input.mouseActive) this.facing = this.aimAngle;
       }
     }
 

@@ -22,11 +22,43 @@ const PROP_TYPES = {
   bamboo: { scale: 0.85, solid: 'circle', r: 0.5 },
   lantern: { scale: 0.85, solid: 'circle', r: 0.22 },
   lantern2: { scale: 0.85, solid: 'circle', r: 0.22 },
-  crate: { scale: 0.65, solid: 'box', shrink: 0.9 },
-  crate_tied: { scale: 0.65, solid: 'box', shrink: 0.9 },
-  crate_small: { scale: 0.65, solid: 'box', shrink: 0.9 },
-  crate_mid: { scale: 0.65, solid: 'box', shrink: 0.9 },
+  // Caixas soltas são quebráveis (golpe de espada) e às vezes escondem comida.
+  crate: { scale: 0.65, solid: 'circle', r: 0.36, off: -0.32, breakable: 22 },
+  crate_tied: { scale: 0.65, solid: 'circle', r: 0.36, off: -0.32, breakable: 30 },
+  crate_small: { scale: 0.65, solid: 'circle', r: 0.3, off: -0.28, breakable: 14 },
+  crate_mid: { scale: 0.65, solid: 'circle', r: 0.32, off: -0.3, breakable: 18 },
+
+  // Floresta (folha 3). Os bosques grandes trazem o próprio "chão" em losango
+  // e formam a mata em volta do mapa.
+  forest_mixed: { scale: 0.95, solid: 'box', shrink: 0.9 },
+  forest_bamboo_pine: { scale: 0.95, solid: 'box', shrink: 0.9 },
+  forest_dark: { scale: 0.95, solid: 'box', shrink: 0.9 },
+  forest_sakura: { scale: 0.95, solid: 'box', shrink: 0.9 },
+  forest_broadleaf: { scale: 0.95, solid: 'box', shrink: 0.9 },
+  forest_pines: { scale: 0.95, solid: 'box', shrink: 0.85 },
+  bamboo_grove: { scale: 0.95, solid: 'box', shrink: 0.8 },
+  pine: { scale: 0.95, solid: 'circle', r: 0.35 },
+  tree_small: { scale: 0.95, solid: 'circle', r: 0.25 },
+  bush_a: { scale: 0.8, solid: 'circle', r: 0.28 },
+  bush_big: { scale: 0.8, solid: 'circle', r: 0.42 },
+  bush_dark: { scale: 0.8, solid: 'circle', r: 0.42 },
+  bush_round: { scale: 0.8, solid: 'circle', r: 0.36 },
+  rock_moss: { scale: 0.8, solid: 'circle', r: 0.33 },
+  rock_big: { scale: 0.8, solid: 'circle', r: 0.3 },
+  rock_tall: { scale: 0.8, solid: 'circle', r: 0.3 },
+  rock_flat: { scale: 0.8, solid: 'circle', r: 0.4 },
+  // Vegetação rasteira: só decoração, não bloqueia.
+  fern: { scale: 0.8, solid: 'none', r: 0.25 },
+  fern2: { scale: 0.8, solid: 'none', r: 0.25 },
+  grass_tall: { scale: 0.8, solid: 'none', r: 0.2 },
 };
+
+/** Tipos usados para preencher a mata além das bordas do mapa. */
+const BORDER_FAR = ['forest_mixed', 'forest_broadleaf', 'bamboo_grove', 'forest_pines', 'pine', 'forest_mixed', 'forest_sakura'];
+// Na frente do mapa (lados sul/leste, mais perto da câmera) só vegetação baixa,
+// para as árvores não taparem a luta.
+const BORDER_LOW = ['bush_big', 'bush_dark', 'bush_round', 'bush_a', 'rock_moss', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'tree_small', 'bush_big'];
+const BORDER = 9; // largura (em tiles) da faixa de floresta ao redor do mapa
 
 class Prop {
   /**
@@ -57,14 +89,38 @@ class Prop {
       const fx = left * def.shrink, fy = right * def.shrink;
       this.box = { x0: x - fx, y0: y - fy, x1: x, y1: y };
     } else {
+      // Colisor circular; `off` desloca o centro para trás do ponto de apoio
+      // (o apoio de uma caixa é o canto da frente, não o meio).
       this.r = def.r;
-      this.box = { x0: x - def.r, y0: y - def.r, x1: x + def.r, y1: y + def.r };
+      this.cx = x + (def.off || 0);
+      this.cy = y + (def.off || 0);
+      this.box = { x0: this.cx - def.r, y0: this.cy - def.r, x1: this.cx + def.r, y1: this.cy + def.r };
     }
+    if (def.breakable) {
+      this.hp = def.breakable;
+      this.flash = 0;
+      this.shake = 0;
+    }
+  }
+
+  /** Alvo para o combate (só caixas quebráveis). */
+  get target() {
+    if (!this._target) {
+      const prop = this;
+      this._target = {
+        x: this.cx, y: this.cy, radius: this.r, alive: true, isCrate: true,
+        takeHit: (hit) => prop.level.breakProp(prop, hit),
+      };
+    }
+    return this._target;
   }
 
   draw(ctx, cam) {
     const p = cam.worldToScreen(this.x, this.y);
-    Sprites.draw(ctx, this.type, p.x, p.y, this.def.scale * cam.scale, { alpha: this.fade });
+    const wob = this.shake ? Math.sin(this.shake * 60) * this.shake * 10 * cam.scale : 0;
+    Sprites.draw(ctx, this.type, p.x + wob, p.y, this.def.scale * cam.scale, {
+      alpha: this.fade, tint: '#ffffff', tintAmount: (this.flash || 0) * 6,
+    });
   }
 
   screenBounds(cam) {
@@ -136,6 +192,7 @@ class Level {
     }
 
     for (const [type, x, y] of stage.props) this.props.push(new Prop(type, x, y));
+    this.posts = []; // colisores invisíveis (pilares do torii)
 
     // Espalha vegetação aleatória (com semente) fora do caminho e longe das construções.
     if (stage.scatter) {
@@ -153,16 +210,105 @@ class Level {
       }
     }
 
-    // Grade de bloqueio (para o campo de fluxo da IA).
+    // Vegetação baixa (arbustos, pedras, samambaias) espalhada pelo mapa.
+    if (stage.decor !== 0) {
+      const rnd = makeRng((stage.scatter ? stage.scatter.seed : 1) * 31 + 7);
+      const types = ['bush_a', 'bush_big', 'bush_dark', 'bush_round', 'rock_moss', 'rock_big', 'rock_tall', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'fern', 'grass_tall'];
+      let placed = 0, tries = 0;
+      const want = stage.decor || 26;
+      while (placed < want && tries++ < 2000) {
+        const x = 0.8 + rnd() * (this.W - 1.6), y = 0.8 + rnd() * (this.H - 1.6);
+        if (this.tileAt(x, y) !== T_GRASS || this.nearPath(x, y, 1.9)) continue;
+        if (this.props.some((p) => this.boxDist(p.box, x, y) < 1.0)) continue;
+        if ((stage.clear || []).some((c) => Math.hypot(x - c[0], y - c[1]) < c[2] * 0.75)) continue;
+        if ((stage.waves || []).some((wv) => Math.hypot(x - wv.center[0], y - wv.center[1]) < 2.2)) continue;
+        this.props.push(new Prop(types[Math.floor(rnd() * types.length)], x, y));
+        placed++;
+      }
+    }
+
+    for (const p of this.props) p.level = this;
+    this.buildBorder(makeRng(this.W * 97 + this.H + (stage.scatter ? stage.scatter.seed : 0)));
+    this.rebuildBlocked();
+    this.flow = new Int16Array(this.W * this.H);
+    this.flowTimer = 0;
+  }
+
+  /** Grade de bloqueio (para o campo de fluxo da IA). */
+  rebuildBlocked() {
     this.blocked = new Uint8Array(this.W * this.H);
     for (let j = 0; j < this.H; j++) {
       for (let i = 0; i < this.W; i++) {
         const cx = i + 0.5, cy = j + 0.5;
-        if (this.props.some((p) => this.solidDist(p, cx, cy) < 0.3)) this.blocked[j * this.W + i] = 1;
+        if (this.solids().some((p) => this.solidDist(p, cx, cy) < 0.3)) this.blocked[j * this.W + i] = 1;
       }
     }
-    this.flow = new Int16Array(this.W * this.H);
-    this.flowTimer = 0;
+  }
+
+  /** Props que colidem (sem vegetação rasteira) + pilares invisíveis. */
+  solids() {
+    if (!this._solids) this._solids = [...this.props.filter((p) => p.def.solid !== 'none'), ...this.posts];
+    return this._solids;
+  }
+
+  addPost(x, y, r) {
+    this.posts.push({ def: { solid: 'circle' }, x, y, cx: x, cy: y, r, box: { x0: x - r, y0: y - r, x1: x + r, y1: y + r } });
+    this._solids = null;
+    this.rebuildBlocked();
+  }
+
+  /** Caixas quebráveis ainda inteiras, como alvos de combate. */
+  breakableTargets() {
+    return this.props.filter((p) => p.def.breakable && p.hp > 0).map((p) => p.target);
+  }
+
+  breakProp(prop, hit) {
+    if (prop.hp <= 0) return false;
+    prop.hp -= hit.damage;
+    prop.flash = 0.1;
+    prop.shake = 0.25;
+    const w = this.world;
+    w.effects.sparks(prop.cx, prop.cy, Math.atan2(hit.ny, hit.nx), 6, '#c89a5a');
+    if (prop.hp <= 0) {
+      prop.target.alive = false;
+      this.props = this.props.filter((p) => p !== prop);
+      this._solids = null;
+      this.rebuildBlocked();
+      w.effects.sparks(prop.cx, prop.cy, Math.atan2(hit.ny, hit.nx), 16, '#8a5a2b', 3);
+      w.effects.smoke(prop.cx, prop.cy, 5, '150,120,80', 0.35);
+      Sfx.hit(false);
+      if (Math.random() < 0.4) w.pickups.push(new Pickup(w, prop.cx, prop.cy, 'onigiri'));
+    }
+    return false; // quebrar caixa não conta para o combo
+  }
+
+  /**
+   * Mata densa em volta do mapa, para o mundo não terminar num "quadrado"
+   * flutuando no preto. Do lado de trás (norte/oeste na tela) vão os bosques
+   * altos; do lado da frente, vegetação mais baixa para não esconder a luta.
+   */
+  buildBorder(rnd) {
+    this.border = [];
+    const W = this.W, H = this.H, B = BORDER;
+    for (let gy = -B; gy < H + B; gy += 2.6) {
+      for (let gx = -B; gx < W + B; gx += 2.6) {
+        const front = gx > W || gy > H;
+        const nearFront = front && gx < W + 7 && gy < H + 7;
+        const count = nearFront ? 3 : 1;
+        for (let k = 0; k < count; k++) {
+          const x = gx + rnd() * (nearFront ? 2.6 : 1.6), y = gy + rnd() * (nearFront ? 2.6 : 1.6);
+          const list = nearFront ? BORDER_LOW : BORDER_FAR;
+          const type = list[Math.floor(rnd() * list.length)];
+          const p = new Prop(type, x, y);
+          const b = p.box;
+          // Precisa ficar inteiramente fora do mapa (com uma folga).
+          if (!(b.x1 < -0.2 || b.y1 < -0.2 || b.x0 > W + 0.6 || b.y0 > H + 0.6)) continue;
+          p.level = this;
+          p.border = true;
+          this.border.push(p);
+        }
+      }
+    }
   }
 
   tileAt(x, y) {
@@ -185,17 +331,18 @@ class Level {
   }
 
   solidDist(p, x, y) {
-    return p.def.solid === 'box' ? this.boxDist(p.box, x, y) : Math.hypot(x - p.x, y - p.y) - p.r;
+    if (p.def.solid === 'none') return 99;
+    return p.def.solid === 'box' ? this.boxDist(p.box, x, y) : Math.hypot(x - p.cx, y - p.cy) - p.r;
   }
 
   isFree(x, y, r) {
     if (x < r || y < r || x > this.W - r || y > this.H - r) return false;
-    return !this.props.some((p) => this.solidDist(p, x, y) < r + 0.1);
+    return !this.solids().some((p) => this.solidDist(p, x, y) < r + 0.1);
   }
 
   /** Empurra um círculo (ator) para fora dos colisores e dos limites do mapa. */
   resolveCircle(a) {
-    for (const p of this.props) {
+    for (const p of this.solids()) {
       if (p.def.solid === 'box') {
         const b = p.box;
         const cx = clamp(a.x, b.x0, b.x1), cy = clamp(a.y, b.y0, b.y1);
@@ -214,7 +361,7 @@ class Level {
           }
         }
       } else {
-        const dx = a.x - p.x, dy = a.y - p.y;
+        const dx = a.x - p.cx, dy = a.y - p.cy;
         const d = Math.hypot(dx, dy), min = a.radius + p.r;
         if (d < min && d > 1e-4) {
           a.x += (dx / d) * (min - d);
@@ -300,19 +447,34 @@ class Level {
     const s = cam.scale;
     // Culling: só os tiles cujo topo está na tela (com margem).
     const m = Iso.HW * 2 * s;
-    for (let j = 0; j < this.H; j++) {
-      for (let i = 0; i < this.W; i++) {
+    const B = BORDER + 2;
+    for (let j = -B; j < this.H + B; j++) {
+      for (let i = -B; i < this.W + B; i++) {
         const top = cam.worldToScreen(i, j);
         if (top.x < -m || top.x > cam.viewW + m || top.y < -m || top.y > cam.viewH + m) continue;
         const right = cam.worldToScreen(i + 1, j);
         const bottom = cam.worldToScreen(i + 1, j + 1);
         const left = cam.worldToScreen(i, j + 1);
-        const t = this.tiles[j * this.W + i];
         const n = hash2(i, j);
+        const outside = i < 0 || j < 0 || i >= this.W || j >= this.H;
+        if (outside) {
+          // Chão de mata: mais escuro quanto mais longe do mapa.
+          const far = Math.max(-i, -j, i - this.W + 1, j - this.H + 1);
+          const l = Math.max(10, 24 - far * 1.1 + n * 4);
+          ctx.fillStyle = `hsl(${92 + (n - 0.5) * 14}, 30%, ${l}%)`;
+          ctx.beginPath();
+          ctx.moveTo(top.x, top.y);
+          ctx.lineTo(right.x, right.y);
+          ctx.lineTo(bottom.x, bottom.y);
+          ctx.lineTo(left.x, left.y);
+          ctx.closePath();
+          ctx.fill();
+          if (n > 0.6 && far < 4) this.drawDeco(ctx, cam, i, j, n, 'leaves', time);
+          continue;
+        }
+        const t = this.tiles[j * this.W + i];
         const hsl = t === T_PATH ? st.path : t === T_STONE ? st.stone : st.base;
-        const edge = Math.min(i, j, this.W - 1 - i, this.H - 1 - j);
-        const dark = edge < 2 ? (2 - edge) * 6 : 0; // escurece as bordas do mapa (vinheta)
-        const l = hsl[2] - 4 + n * 7 + ((i + j) % 2 ? 0 : 2) - dark;
+        const l = hsl[2] - 4 + n * 7 + ((i + j) % 2 ? 0 : 2);
         ctx.fillStyle = `hsl(${hsl[0] + (n - 0.5) * 10}, ${hsl[1]}%, ${l}%)`;
         ctx.beginPath();
         ctx.moveTo(top.x, top.y);

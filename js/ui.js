@@ -66,6 +66,13 @@ const UI = {
     ctx.fillStyle = dashReady ? '#f3e9d8' : 'rgba(243,233,216,0.3)';
     ctx.font = `600 11px ${FONT_UI}`;
     ctx.fillText(dashReady ? 'DASH ●' : 'DASH ○', 20, top + 48);
+    if (p.mods.iai) {
+      ctx.fillStyle = p.heavyCd <= 0 ? '#a9d4ff' : 'rgba(169,212,255,0.3)';
+      ctx.fillText(p.heavyCd <= 0 ? 'IAI ●' : 'IAI ○', 80, top + 48);
+    }
+    const weapon = [...p.items].reverse().map((id) => ITEMS[id]).find((it) => it && (it.icon === 'blade' || it.icon === 'wind'));
+    ctx.fillStyle = 'rgba(243,233,216,0.6)';
+    ctx.fillText(weapon ? weapon.name : 'Katana do Andarilho', 20, top + 66);
 
     // Nome da fase + objetivo
     ctx.textAlign = 'center';
@@ -193,8 +200,9 @@ const UI = {
     }
     const lines = [
       'WASD / setas — mover      Mouse — mirar      Clique — corte (3 cliques = combo)',
-      'Espaço / Shift — dash (esquiva invulnerável)      Dash + clique — investida',
-      'Esc / P — pausa      M — som      F3 — debug',
+      'Espaço / Shift — dash (esquiva invulnerável)      Dash + clique — investida      Botão direito — iaijutsu (item)',
+      'Explore os cantos de cada vila: o selo do portão e armas novas estão escondidos',
+      'Esc / P — pausa e tesouros      M — som      F3 — debug',
     ];
     ctx.font = `500 13px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.6)';
@@ -244,15 +252,105 @@ const UI = {
     return stage.story.reduce((s, p) => s + p.length, 0);
   },
 
-  pause(ctx, cam) {
-    this.panel(ctx, cam, 0.6);
+  pause(ctx, cam, items) {
+    this.panel(ctx, cam, 0.7);
+    const cx = cam.viewW / 2;
     ctx.textAlign = 'center';
     ctx.font = `700 40px ${FONT_TITLE}`;
     ctx.fillStyle = '#f3e9d8';
-    ctx.fillText('Pausa', cam.viewW / 2, cam.viewH / 2 - 10);
+    ctx.fillText('Pausa', cx, cam.viewH * 0.3);
     ctx.font = `500 14px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.7)';
-    ctx.fillText('Esc / P para continuar  ·  M liga/desliga o som', cam.viewW / 2, cam.viewH / 2 + 24);
+    ctx.fillText('Esc / P para continuar  ·  M liga/desliga o som', cx, cam.viewH * 0.3 + 30);
+    ctx.font = `700 16px ${FONT_TITLE}`;
+    ctx.fillStyle = '#ffcf6a';
+    ctx.fillText(`Tesouros encontrados (${items.length}/${Object.keys(ITEMS).length})`, cx, cam.viewH * 0.3 + 80);
+    ctx.font = `500 14px ${FONT_UI}`;
+    Object.entries(ITEMS).forEach(([id, it], i) => {
+      const have = items.includes(id);
+      ctx.fillStyle = have ? 'rgba(243,233,216,0.95)' : 'rgba(243,233,216,0.35)';
+      ctx.fillText(have ? `${it.name}: ${it.desc}` : '???  (escondido em alguma vila)', cx, cam.viewH * 0.3 + 108 + i * 24);
+    });
+  },
+
+  /**
+   * Minimapa isométrico com névoa: só mostra o que o jogador já viu.
+   * Tesouros e emboscadas aparecem quando entram na área explorada.
+   */
+  minimap(ctx, w) {
+    if (w.cutscene) return;
+    const cam = w.camera, L = w.level;
+    const size = Math.min(190, cam.viewW * 0.22);
+    const hw = size / (L.W + L.H), hh = hw / 2;
+    const ox = cam.viewW - 18 - size / 2;
+    const oy = cam.viewH - 18 - (L.W + L.H) * hh - cam.viewH * 0.1 * cam.letterbox;
+    const pt = (x, y) => ({ x: ox + (x - y) * hw, y: oy + (x + y) * hh });
+    // Base pré-desenhada uma vez por fase.
+    if (!L.miniCanvas || L.miniHw !== hw) {
+      const dpr = 2;
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(size * dpr) + 4;
+      c.height = Math.ceil((L.W + L.H) * hh * dpr) + 4;
+      const g = c.getContext('2d');
+      g.scale(dpr, dpr);
+      const lp = (x, y) => ({ x: size / 2 + (x - y) * hw, y: (x + y) * hh });
+      for (let j = 0; j < L.H; j++) {
+        for (let i = 0; i < L.W; i++) {
+          const t = L.tiles[j * L.W + i];
+          g.fillStyle = L.blocked[j * L.W + i] ? '#2b2620' : t === T_PATH ? '#8a6f4a' : t === T_STONE ? '#8d8a82' : '#3f5a2e';
+          const a = lp(i, j), b = lp(i + 1, j), c2 = lp(i + 1, j + 1), d = lp(i, j + 1);
+          g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(c2.x, c2.y); g.lineTo(d.x, d.y); g.closePath(); g.fill();
+        }
+      }
+      L.miniCanvas = c;
+      L.miniHw = hw;
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(L.miniCanvas, ox - size / 2, oy, L.miniCanvas.width / 2, L.miniCanvas.height / 2);
+    // Névoa nos tiles não explorados.
+    ctx.fillStyle = 'rgba(12,10,8,0.92)';
+    ctx.beginPath();
+    for (let j = 0; j < L.H; j++) {
+      for (let i = 0; i < L.W; i++) {
+        if (w.explored[j * L.W + i]) continue;
+        const a = pt(i, j), b = pt(i + 1, j), c2 = pt(i + 1, j + 1), d = pt(i, j + 1);
+        ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(d.x, d.y); ctx.closePath();
+      }
+    }
+    ctx.fill();
+    // Contorno
+    const n = pt(0, 0), e = pt(L.W, 0), s2 = pt(L.W, L.H), wv = pt(0, L.H);
+    ctx.strokeStyle = 'rgba(243,233,216,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(n.x, n.y); ctx.lineTo(e.x, e.y); ctx.lineTo(s2.x, s2.y); ctx.lineTo(wv.x, wv.y); ctx.closePath(); ctx.stroke();
+    const seen = (x, y) => w.explored[clamp(Math.floor(y), 0, L.H - 1) * L.W + clamp(Math.floor(x), 0, L.W - 1)];
+    const dot = (x, y, r, color) => {
+      const q = pt(x, y);
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill();
+    };
+    for (const enc of w.encounters) {
+      if (enc.state === 'done' || !seen(enc.center[0], enc.center[1])) continue;
+      const q = pt(enc.center[0], enc.center[1]);
+      ctx.strokeStyle = '#ff5a4a';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(q.x - 4, q.y - 4); ctx.lineTo(q.x + 4, q.y + 4); ctx.moveTo(q.x + 4, q.y - 4); ctx.lineTo(q.x - 4, q.y + 4); ctx.stroke();
+    }
+    for (const pk of w.pickups) {
+      if ((pk.kind === 'seal' || pk.kind === 'item') && seen(pk.x, pk.y)) dot(pk.x, pk.y, 3.5 + Math.sin(w.time * 5), '#ffcf6a');
+    }
+    if (w.stage.exit) {
+      const q = pt(w.stage.exit[0], w.stage.exit[1]);
+      ctx.fillStyle = w.exitOpen ? '#ffcf6a' : '#c8322b';
+      ctx.fillRect(q.x - 4, q.y - 5, 8, 2);
+      ctx.fillRect(q.x - 3, q.y - 5, 1.5, 7);
+      ctx.fillRect(q.x + 1.5, q.y - 5, 1.5, 7);
+    }
+    for (const en of w.enemies) if (en.alive) dot(en.x, en.y, 2, '#ff5a4a');
+    if (w.boss && w.boss.alive) dot(w.boss.x, w.boss.y, 3.5, '#ff2a1a');
+    dot(w.player.x, w.player.y, 3, '#ffffff');
+    ctx.restore();
   },
 
   gameOver(ctx, cam, t) {

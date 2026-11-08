@@ -254,6 +254,8 @@ class Kunai {
     this.radius = 0.25;
     this.alive = true;
     this.owner = owner;
+    this.isProjectile = true;
+    this.hostile = true; // pode ser rebatida pelo jogador
   }
 
   get box() {
@@ -308,13 +310,18 @@ class Kunai {
   }
 }
 
-/** Itens no chão: onigiri (cura) e a relíquia sagrada. */
+/**
+ * Itens no chão:
+ *  onigiri — cura        seal — selo ofuda que abre o portão da vila
+ *  item    — arma/relíquia (ver ITEMS)      relic — o Espelho da Lua
+ */
 class Pickup {
-  constructor(world, x, y, kind) {
+  constructor(world, x, y, kind, id) {
     this.world = world;
     this.x = x;
     this.y = y;
     this.kind = kind;
+    this.id = id;
     this.t = 0;
     this.alive = true;
     this.radius = 0.2;
@@ -328,15 +335,17 @@ class Pickup {
     this.t += dt;
     const p = this.world.player;
     if (!p.alive || this.t < 0.4) return;
-    const reach = this.kind === 'relic' ? 0.9 : 0.65;
+    const reach = this.kind === 'onigiri' ? 0.65 : 0.9;
     if (Math.hypot(p.x - this.x, p.y - this.y) < reach) {
       this.alive = false;
       if (this.kind === 'onigiri') {
         p.heal(22);
         this.world.effects.text(this.x, this.y, '+22', '#7dff8a');
         Sfx.pickup();
-      } else {
+      } else if (this.kind === 'relic') {
         this.world.onRelicTaken();
+      } else {
+        this.world.onLoot(this);
       }
     }
     if (this.kind === 'onigiri' && this.t > 25) this.alive = false;
@@ -350,6 +359,10 @@ class Pickup {
     ctx.beginPath();
     ctx.ellipse(sh.x, sh.y, 7 * s, 3.5 * s, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (this.kind === 'seal' || this.kind === 'item') {
+      this.drawTreasure(ctx, cam, bob);
+      return;
+    }
     if (this.kind === 'onigiri') {
       const c = cam.worldToScreen(this.x, this.y, 12 + bob);
       ctx.fillStyle = '#f7f3ea';
@@ -384,5 +397,89 @@ class Pickup {
       ctx.arc(c.x + 2.5 * s, c.y - 1 * s, 6.5 * s, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /** Pedestal de pedra + objeto flutuando com brilho (selo ou arma). */
+  drawTreasure(ctx, cam, bob) {
+    const s = cam.scale;
+    const base = cam.worldToScreen(this.x, this.y);
+    // pedestal
+    ctx.fillStyle = '#6d6a63';
+    ctx.beginPath();
+    ctx.ellipse(base.x, base.y, 14 * s, 7 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#8a867d';
+    ctx.fillRect(base.x - 10 * s, base.y - 12 * s, 20 * s, 12 * s);
+    ctx.beginPath();
+    ctx.ellipse(base.x, base.y - 12 * s, 10 * s, 5 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // brilho
+    const c = cam.worldToScreen(this.x, this.y, 38 + bob * 1.5);
+    const gold = this.kind === 'seal' ? '255,235,200' : '255,205,110';
+    const pulse = 0.55 + 0.45 * Math.sin(this.t * 4);
+    const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, 40 * s);
+    g.addColorStop(0, `rgba(${gold},${0.75 * pulse})`);
+    g.addColorStop(1, `rgba(${gold},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 40 * s, 0, Math.PI * 2);
+    ctx.fill();
+    // coluna de luz até o céu (visível de longe: incentiva a exploração)
+    const sky = cam.worldToScreen(this.x, this.y, 260);
+    const lg = ctx.createLinearGradient(0, sky.y, 0, base.y);
+    lg.addColorStop(0, `rgba(${gold},0)`);
+    lg.addColorStop(1, `rgba(${gold},${0.22 * pulse})`);
+    ctx.fillStyle = lg;
+    ctx.fillRect(c.x - 6 * s, sky.y, 12 * s, base.y - sky.y);
+
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.lineCap = 'round';
+    const icon = this.kind === 'seal' ? 'seal' : (ITEMS[this.id] || {}).icon;
+    if (icon === 'seal') {
+      // ofuda: tira de papel com selo vermelho
+      ctx.rotate(Math.sin(this.t * 2) * 0.12);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.fillRect(-6 * s, -14 * s, 12 * s, 28 * s);
+      ctx.fillStyle = '#b3202a';
+      ctx.fillRect(-3.5 * s, -10 * s, 7 * s, 7 * s);
+      ctx.fillRect(-1 * s, -1 * s, 2 * s, 12 * s);
+    } else if (icon === 'blade' || icon === 'wind') {
+      ctx.rotate(-0.8);
+      ctx.strokeStyle = '#e8eef5';
+      ctx.lineWidth = 3 * s;
+      ctx.beginPath(); ctx.moveTo(-2 * s, 0); ctx.quadraticCurveTo(10 * s, -1 * s, (icon === 'wind' ? 22 : 18) * s, -4 * s); ctx.stroke();
+      ctx.strokeStyle = '#2b1d14';
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath(); ctx.moveTo(-12 * s, 1 * s); ctx.lineTo(-3 * s, 0); ctx.stroke();
+      ctx.fillStyle = '#c9952c';
+      ctx.fillRect(-4 * s, -4 * s, 2.5 * s, 8 * s);
+      if (icon === 'wind') {
+        ctx.strokeStyle = 'rgba(200,240,255,0.8)';
+        ctx.lineWidth = 1.5 * s;
+        ctx.beginPath(); ctx.arc(4 * s, 6 * s, 9 * s, 0.2, 1.6); ctx.stroke();
+      }
+    } else if (icon === 'charm') {
+      ctx.fillStyle = '#b3202a';
+      ctx.beginPath();
+      ctx.moveTo(-7 * s, -6 * s); ctx.lineTo(7 * s, -6 * s); ctx.lineTo(7 * s, 9 * s); ctx.lineTo(0, 12 * s); ctx.lineTo(-7 * s, 9 * s);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#e7c46a';
+      ctx.fillRect(-4 * s, -2 * s, 8 * s, 2 * s);
+      ctx.strokeStyle = '#e7c46a';
+      ctx.lineWidth = 1.5 * s;
+      ctx.beginPath(); ctx.moveTo(0, -6 * s); ctx.lineTo(0, -11 * s); ctx.stroke();
+    } else {
+      // pergaminho
+      ctx.fillStyle = '#efe4c8';
+      ctx.fillRect(-10 * s, -5 * s, 20 * s, 10 * s);
+      ctx.fillStyle = '#6b3a1e';
+      ctx.fillRect(-12 * s, -7 * s, 3 * s, 14 * s);
+      ctx.fillRect(9 * s, -7 * s, 3 * s, 14 * s);
+      ctx.fillStyle = '#2b1d14';
+      ctx.fillRect(-5 * s, -2 * s, 10 * s, 1.5 * s);
+      ctx.fillRect(-5 * s, 1 * s, 7 * s, 1.5 * s);
+    }
+    ctx.restore();
   }
 }

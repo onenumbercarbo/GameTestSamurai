@@ -13,6 +13,8 @@ class Input {
     this.pressed = new Set();
     this.mouse = { x: 0, y: 0, inside: false };
     this.attackPresses = 0;
+    this.heavyPresses = 0;
+    this.mouseMovedAt = -1e9; // quando o mouse se mexeu pela última vez (ms)
     this.clicked = false; // clique para menus/telas
     this.onFirstGesture = null;
 
@@ -38,6 +40,7 @@ class Input {
       this.mouse.x = e.clientX - r.left;
       this.mouse.y = e.clientY - r.top;
       this.mouse.inside = true;
+      this.mouseMovedAt = performance.now();
     };
     canvas.addEventListener('mousemove', setMouse);
     canvas.addEventListener('mouseleave', () => (this.mouse.inside = false));
@@ -47,6 +50,8 @@ class Input {
       if (e.button === 0) {
         this.attackPresses++;
         this.clicked = true;
+      } else if (e.button === 2) {
+        this.heavyPresses++;
       }
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -68,6 +73,19 @@ class Input {
     return false;
   }
 
+  consumeHeavy() {
+    if (this.heavyPresses > 0) {
+      this.heavyPresses = 0;
+      return true;
+    }
+    return false;
+  }
+
+  /** O jogador está usando o mouse agora (mexeu nos últimos 1,5 s)? */
+  get mouseActive() {
+    return performance.now() - this.mouseMovedAt < 1500;
+  }
+
   /** Confirmar em menus: Enter, Espaço ou clique. */
   consumeConfirm() {
     const ok = this.wasPressed('Enter', 'NumpadEnter', 'Space') || this.clicked;
@@ -79,6 +97,7 @@ class Input {
   flush() {
     this.pressed.clear();
     this.attackPresses = 0;
+    this.heavyPresses = 0;
     this.clicked = false;
   }
 
@@ -86,5 +105,6 @@ class Input {
     this.pressed.clear();
     this.clicked = false;
     this.attackPresses = Math.min(this.attackPresses, 1);
+    this.heavyPresses = Math.min(this.heavyPresses, 1);
   }
 }

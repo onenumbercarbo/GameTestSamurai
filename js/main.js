@@ -5,64 +5,65 @@
 
 /* ================================ portão torii ================================ */
 
-/** Portão de saída da vila (desenhado proceduralmente). Brilha quando abre. */
+/**
+ * Portão de saída da vila: o torii da folha de floresta. Os pilares ficam
+ * alinhados ao eixo X do mundo (a viga desce para a direita na tela) e são
+ * colisores invisíveis; o jogador passa ENTRE eles.
+ * Fechado: escurecido, com uma barreira vermelha (kekkai). Aberto: luz dourada.
+ */
+const TORII_SCALE = 0.95;
+const TORII_HALF = 1.33; // meia distância entre os pilares, em tiles
+
 class ToriiGate {
-  constructor(x, y) {
+  constructor(x, y, level) {
     this.x = x;
     this.y = y;
-    // O portão fica de frente para a câmera: seus pilares se alinham ao eixo
-    // (1, -1) do mundo, que é exatamente a horizontal da tela isométrica.
-    this.px = Math.SQRT1_2;
-    this.py = -Math.SQRT1_2;
     this.open = false;
     this.t = 0;
     this.alive = true;
-    const w = 1.3;
-    const xs = [x + this.px * w, x - this.px * w], ys = [y + this.py * w, y - this.py * w];
-    this.box = { x0: Math.min(...xs) - 0.15, y0: Math.min(...ys) - 0.15, x1: Math.max(...xs) + 0.15, y1: Math.max(...ys) + 0.15 };
+    this.box = { x0: x - TORII_HALF - 0.3, y0: y - 0.3, x1: x + TORII_HALF + 0.3, y1: y + 0.3 };
+    level.addPost(x - TORII_HALF, y, 0.3);
+    level.addPost(x + TORII_HALF, y, 0.3);
   }
 
   draw(ctx, cam) {
     const s = cam.scale;
-    const w = 1.3, H = 100;
-    const posts = [[this.x + this.px * w, this.y + this.py * w], [this.x - this.px * w, this.y - this.py * w]];
-    if (this.open) {
-      // Coluna de luz entre os pilares.
-      const a = cam.worldToScreen(posts[0][0], posts[0][1]), b = cam.worldToScreen(posts[1][0], posts[1][1]);
-      const top = cam.worldToScreen(this.x, this.y, H * 1.6);
-      const g = ctx.createLinearGradient(0, top.y, 0, (a.y + b.y) / 2);
-      g.addColorStop(0, 'rgba(255,210,120,0)');
-      g.addColorStop(1, `rgba(255,210,120,${0.3 + 0.15 * Math.sin(this.t * 4)})`);
-      ctx.fillStyle = g;
+    const a = cam.worldToScreen(this.x - TORII_HALF, this.y);
+    const b = cam.worldToScreen(this.x + TORII_HALF, this.y);
+    const H = 150;
+    const at = cam.worldToScreen(this.x - TORII_HALF, this.y, H);
+    const bt = cam.worldToScreen(this.x + TORII_HALF, this.y, H);
+    const plane = (fill) => {
+      ctx.fillStyle = fill;
       ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.lineTo(b.x, top.y);
-      ctx.lineTo(a.x, top.y);
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(bt.x, bt.y); ctx.lineTo(at.x, at.y);
       ctx.closePath();
       ctx.fill();
-    }
-    ctx.lineCap = 'butt';
-    const red = this.open ? '#c8322b' : '#7a2420';
-    for (const [x, y] of posts) {
-      const b0 = cam.worldToScreen(x, y, 0), b1 = cam.worldToScreen(x, y, 12), t = cam.worldToScreen(x, y, H);
-      ctx.strokeStyle = red;
-      ctx.lineWidth = 7 * s;
-      ctx.beginPath(); ctx.moveTo(b1.x, b1.y); ctx.lineTo(t.x, t.y); ctx.stroke();
-      ctx.strokeStyle = '#1b1411';
-      ctx.beginPath(); ctx.moveTo(b0.x, b0.y); ctx.lineTo(b1.x, b1.y); ctx.stroke();
-    }
-    const beam = (z, ext, width, color) => {
-      const e = w + ext;
-      const a = cam.worldToScreen(this.x + this.px * e, this.y + this.py * e, z);
-      const b = cam.worldToScreen(this.x - this.px * e, this.y - this.py * e, z);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width * s;
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     };
-    beam(H * 0.78, 0.2, 5, red);
-    beam(H, 0.45, 7, red);
-    beam(H + 6, 0.55, 5, '#1b1411');
+    const g = cam.worldToScreen(this.x, this.y);
+    Sprites.draw(ctx, 'torii', g.x, g.y, TORII_SCALE * s, {
+      tint: '#0b0806', tintAmount: this.open ? 0 : 0.35,
+    });
+    ctx.save();
+    if (this.open) {
+      const lg = ctx.createLinearGradient(0, at.y, 0, a.y);
+      lg.addColorStop(0, 'rgba(255,210,120,0)');
+      lg.addColorStop(1, `rgba(255,210,120,${0.35 + 0.15 * Math.sin(this.t * 4)})`);
+      plane(lg);
+    } else {
+      // Barreira selada: ondas vermelhas translúcidas entre os pilares.
+      ctx.globalAlpha = 0.25 + 0.1 * Math.sin(this.t * 3);
+      plane('rgba(200,40,30,0.6)');
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = 'rgba(255,120,90,0.8)';
+      ctx.lineWidth = 1.5 * s;
+      for (let k = 0; k < 4; k++) {
+        const z = ((this.t * 30 + k * 35) % 140);
+        const p0 = cam.worldToScreen(this.x - TORII_HALF, this.y, z), p1 = cam.worldToScreen(this.x + TORII_HALF, this.y, z);
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 }
 
@@ -122,11 +123,18 @@ class Cutscene {
   input.onFirstGesture = () => Sfx.unlock();
 
   const SAVE_KEY = 'ronin-reliquia-save';
+  // Progresso salvo: { stage, items }. Aceita o formato antigo (só o número da vila).
   const loadSave = () => {
-    try { return Number(localStorage.getItem(SAVE_KEY)) || 0; } catch { return 0; }
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return { stage: 0, items: [] };
+      const v = JSON.parse(raw);
+      if (typeof v === 'number') return { stage: v, items: [] };
+      return { stage: v.stage || 0, items: Array.isArray(v.items) ? v.items.filter((i) => ITEMS[i]) : [] };
+    } catch { return { stage: 0, items: [] }; }
   };
   const writeSave = (v) => {
-    try { localStorage.setItem(SAVE_KEY, String(v)); } catch { /* sem armazenamento: tudo bem */ }
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(v)); } catch { /* sem armazenamento: tudo bem */ }
   };
 
   const game = {
@@ -138,7 +146,8 @@ class Cutscene {
     fade: 1,
     fadeDir: -1,
     fadeThen: null,
-    save: 0,
+    save: { stage: 0, items: [] },
+    items: [],
     debug: false,
     stats: null,
     ambient: [],
@@ -154,6 +163,9 @@ class Cutscene {
       stage,
       index,
       level: new Level(stage),
+      encounters: stage.waves.map((e) => ({ ...e, state: 'idle' })),
+      sealFound: !stage.seal,
+      sealWarned: 0,
       camera,
       effects: new Effects(),
       enemies: [],
@@ -178,17 +190,46 @@ class Cutscene {
       time: 0,
       smokeTimer: 0,
     };
-    w.player = new Player(w, stage.start[0], stage.start[1]);
-    if (hp !== undefined) w.player.hp = hp;
+    w.level.world = w;
+    w.player = new Player(w, stage.start[0], stage.start[1], game.items);
+    if (hp !== undefined) w.player.hp = Math.min(hp, w.player.maxHp);
 
-    if (stage.exit) w.gate = new ToriiGate(stage.exit[0], stage.exit[1]);
+    if (stage.exit) w.gate = new ToriiGate(stage.exit[0], stage.exit[1], w.level);
     if (stage.boss) w.boss = new Boss(w, stage.boss.spawn[0], stage.boss.spawn[1]);
+
+    // Tesouros do mapa (já coletados em outra tentativa não reaparecem).
+    for (const l of stage.loot || []) {
+      if (l[0] === 'seal') w.pickups.push(new Pickup(w, l[1], l[2], 'seal'));
+      else if (!game.items.includes(l[1])) w.pickups.push(new Pickup(w, l[2], l[3], 'item', l[1]));
+    }
+
+    // Névoa do mapa: tiles já vistos (para o minimapa).
+    w.explored = new Uint8Array(stage.size[0] * stage.size[1]);
+    w.exploreTimer = 0;
 
     w.targets = () => {
       const t = w.enemies.filter((e) => e.alive);
       if (w.boss && w.boss.alive) t.push(w.boss);
-      for (const p of w.projectiles) t.push(p);
+      for (const p of w.projectiles) if (p.hostile) t.push(p);
+      for (const c of w.level.breakableTargets()) t.push(c);
       return t;
+    };
+
+    w.onLoot = (pk) => {
+      if (pk.kind === 'seal') {
+        w.sealFound = true;
+        Sfx.gong();
+        w.showBanner('Selo do portão', { kanji: '御札', sub: 'O torii que leva à próxima vila pode ser aberto', dur: 2.8, color: '#ffcf6a' });
+      } else {
+        const it = ITEMS[pk.id];
+        w.player.equip(pk.id);
+        game.items = w.player.items;
+        writeSave({ stage: game.stageIndex, items: game.items });
+        Sfx.gong();
+        w.effects.ring(pk.x, pk.y, 3, 1, '255,210,120');
+        w.showBanner(it.name, { kanji: '宝', sub: it.desc, dur: 3.4, color: '#ffcf6a' });
+      }
+      w.camera.zoomPunch(0.06);
     };
     Object.defineProperty(w, 'inCombat', { get: () => !!(w.activeArena || w.bossFight) });
 
@@ -196,15 +237,22 @@ class Cutscene {
       w.banner = { text, t: 0, dur: opts.dur || 2.2, ...opts };
     };
 
+    w.requiredLeft = () => w.encounters.filter((e) => !e.guard && e.state !== 'done').length;
+
     w.objectiveText = () => {
       if (w.relic) return 'Recupere a relíquia no altar';
-      if (w.bossFight) return 'Derrote Gendō — leia os sinais vermelhos no chão e use o dash';
+      if (w.bossFight) return 'Derrote Gendō: leia os sinais vermelhos no chão e use o dash';
       if (w.activeArena) {
         const n = w.enemies.filter((e) => e.alive).length + w.spawnQueue.length;
-        return `Derrote os saqueadores — ${n} restante${n === 1 ? '' : 's'}`;
+        return `Derrote os saqueadores: ${n} restante${n === 1 ? '' : 's'}`;
       }
       if (w.exitOpen) return 'Siga até o portão torii';
-      return stage.objective;
+      if (stage.boss) return stage.objective;
+      const parts = [];
+      const req = w.requiredLeft();
+      if (req) parts.push(`${req} emboscada${req > 1 ? 's' : ''} no caminho`);
+      if (!w.sealFound) parts.push('encontre o selo do portão (explore o mapa)');
+      return parts.length ? 'Falta: ' + parts.join(' · ') : stage.objective;
     };
 
     w.onBossPhase2 = (b) => {
@@ -329,17 +377,14 @@ class Cutscene {
     const p = w.player;
     const stage = w.stage;
 
-    // Ondas: chegar perto do centro de um encontro trava a arena.
-    if (!w.activeArena && !w.exitOpen && stage.waves.length) {
-      const next = stage.waves[w.waveIndex + 1];
-      // Dispara ao chegar perto OU ao passar do encontro (progresso na tela = x - y),
-      // para que nenhuma luta possa ser "contornada".
-      const near = next && Math.hypot(p.x - next.center[0], p.y - next.center[1]) < next.r - 0.5;
-      const past = next && p.x - p.y > next.center[0] - next.center[1] + 1;
-      if (near || past) {
-        w.waveIndex++;
-        w.activeArena = { ...next, groups: next.groups.map((g) => g.slice()), delay: 0.5 };
-        w.showBanner(`Emboscada ${w.waveIndex + 1}/${stage.waves.length}`, { color: '#ff6a50', dur: 1.6, y: 0.24 });
+    // Emboscadas: chegar perto do centro de uma trava a arena (uma por vez).
+    if (!w.activeArena) {
+      const enc = w.encounters.find((e) => e.state === 'idle' && Math.hypot(p.x - e.center[0], p.y - e.center[1]) < e.r - 0.5);
+      if (enc) {
+        enc.state = 'active';
+        w.activeArena = { ...enc, enc, groups: enc.groups.map((g) => g.slice()), delay: 0.5 };
+        const label = enc.guard ? 'Emboscada! Guardiões do tesouro' : 'Emboscada!';
+        w.showBanner(label, { color: '#ff6a50', dur: 1.6, y: 0.24 });
         Sfx.smoke();
       }
     }
@@ -352,20 +397,23 @@ class Cutscene {
         a.delay = 1.2;
       }
       if (!a.groups.length && alive() === 0) {
+        a.enc.state = 'done';
         w.activeArena = null;
-        if (w.waveIndex >= stage.waves.length - 1) {
-          w.exitOpen = true;
-          if (w.gate) w.gate.open = true;
-          w.showBanner('Vila libertada', { sub: 'Siga até o portão torii', dur: 2.6, color: '#ffcf6a' });
-          Sfx.gong();
-        } else {
-          w.showBanner('Área limpa', { dur: 1.4, y: 0.24 });
-        }
+        w.showBanner('Área limpa', { dur: 1.4, y: 0.24 });
       }
     }
-    if (!stage.waves.length && stage.exit && !w.exitOpen) {
+
+    // O portão abre quando as emboscadas do caminho caíram e o selo foi achado.
+    if (stage.exit && !w.exitOpen && !w.activeArena && w.requiredLeft() === 0 && w.sealFound) {
       w.exitOpen = true;
-      if (w.gate) w.gate.open = true;
+      w.gate.open = true;
+      w.showBanner('O portão está aberto', { sub: 'Siga até o torii para a próxima vila', dur: 2.6, color: '#ffcf6a' });
+      Sfx.gong();
+    }
+    // Aviso ao encostar no portão ainda selado.
+    if (stage.exit && !w.exitOpen && w.time > w.sealWarned && Math.hypot(p.x - stage.exit[0], p.y - stage.exit[1]) < 2.4) {
+      w.sealWarned = w.time + 6;
+      w.showBanner('O portão está selado', { sub: w.objectiveText(), dur: 2.4, y: 0.24, color: '#ff8a70' });
     }
 
     // Boss: ao entrar no pátio do santuário.
@@ -397,7 +445,7 @@ class Cutscene {
     }
 
     // Saída.
-    if (w.exitOpen && stage.exit && p.alive && Math.hypot(p.x - stage.exit[0], p.y - stage.exit[1]) < 1.5) {
+    if (w.exitOpen && stage.exit && p.alive && Math.hypot(p.x - stage.exit[0], p.y - stage.exit[1]) < 0.9) {
       stageClear();
     }
   }
@@ -433,6 +481,23 @@ class Cutscene {
     if (w.player.alive && w.player.dashTime <= 0) w.player.separateFrom(bodies, 0.5);
 
     updateEncounters(w, dt);
+
+    for (const pr of w.level.props) {
+      if (pr.flash) pr.flash = Math.max(0, pr.flash - dt);
+      if (pr.shake) pr.shake = Math.max(0, pr.shake - dt);
+    }
+
+    // Revela o minimapa em volta do jogador.
+    w.exploreTimer -= dt;
+    if (w.exploreTimer <= 0) {
+      w.exploreTimer = 0.2;
+      const R = 7, W = w.level.W, H = w.level.H, p = w.player;
+      for (let j = Math.max(0, Math.floor(p.y - R)); j < Math.min(H, p.y + R); j++) {
+        for (let i = Math.max(0, Math.floor(p.x - R)); i < Math.min(W, p.x + R); i++) {
+          if (Math.hypot(i + 0.5 - p.x, j + 0.5 - p.y) < R) w.explored[j * W + i] = 1;
+        }
+      }
+    }
 
     // Fumaça das casas incendiadas.
     w.smokeTimer -= dt;
@@ -493,7 +558,7 @@ class Cutscene {
 
     // Monta a lista de desenháveis visíveis e ordena por profundidade isométrica.
     const list = [];
-    for (const pr of w.level.props) {
+    for (const pr of [...w.level.props, ...w.level.border]) {
       const b = pr.screenBounds(cam);
       if (b.x1 < 0 || b.x0 > cam.viewW || b.y1 < 0 || b.y0 > cam.viewH) continue;
       list.push(pr);
@@ -525,12 +590,12 @@ class Cutscene {
     const cam = camera;
     ctx.save();
     ctx.lineWidth = 1;
-    for (const p of w.level.props) {
+    for (const p of w.level.solids()) {
       ctx.strokeStyle = 'rgba(80,200,255,0.8)';
       if (p.def.solid === 'box') {
         const b = p.box;
         Ground.path(ctx, cam, [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]]);
-      } else Ground.circle(ctx, cam, p.x, p.y, p.r);
+      } else if (p.def.solid === 'circle') Ground.circle(ctx, cam, p.cx, p.cy, p.r);
       ctx.stroke();
     }
     for (const a of [w.player, ...w.enemies, ...(w.boss ? [w.boss] : [])]) {
@@ -609,18 +674,19 @@ class Cutscene {
     if (game.state !== 'play') return;
     game.state = 'transition';
     Sfx.gong();
-    writeSave(game.stageIndex + 1);
+    writeSave({ stage: game.stageIndex + 1, items: game.items });
     fadeTo(() => startStory(game.stageIndex + 1));
   }
 
   function toVictory() {
-    writeSave(0);
+    writeSave({ stage: 0, items: [] });
     game.state = 'victory';
     game.t = 0;
   }
 
-  function newGame(from = 0) {
+  function newGame(from = 0, items = []) {
     game.stats = newStats();
+    game.items = items.slice();
     fadeTo(() => startStory(from));
     game.state = 'transition';
   }
@@ -689,8 +755,8 @@ class Cutscene {
         renderAmbient(w.stage.ambient, realDt);
         UI.vignette(ctx, camera, 0);
         UI.letterbox(ctx, camera);
-        UI.title(ctx, camera, game.t, game.save);
-        if (input.wasPressed('KeyC') && game.save > 0) { input.flush(); newGame(game.save); }
+        UI.title(ctx, camera, game.t, game.save.stage);
+        if (input.wasPressed('KeyC') && game.save.stage > 0) { input.flush(); newGame(game.save.stage, game.save.items); }
         else if (input.consumeConfirm()) newGame(0);
         break;
       }
@@ -730,6 +796,7 @@ class Cutscene {
         UI.vignette(ctx, camera, w.damageVignette);
         UI.letterbox(ctx, camera);
         UI.hud(ctx, w);
+        UI.minimap(ctx, w);
         UI.banner(ctx, w);
         break;
       }
@@ -738,7 +805,7 @@ class Cutscene {
         renderWorld(w);
         UI.letterbox(ctx, camera);
         UI.hud(ctx, w);
-        UI.pause(ctx, camera);
+        UI.pause(ctx, camera, game.items);
         if (input.wasPressed('Escape', 'KeyP')) { game.state = 'play'; input.flush(); }
         break;
 

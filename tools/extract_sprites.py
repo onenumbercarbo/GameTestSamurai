@@ -3,7 +3,7 @@ Extrai os sprites das folhas com fundo verde (chroma key) e gera:
   assets/sprites/<nome>.png  — PNG com transparência, já recortado
   js/atlas.js                — tamanhos e ponto de ancoragem (pés) de cada sprite
 
-Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg>
+Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg>
 
 Cada quadro é definido por um retângulo generoso na folha. Dentro dele mantemos
 o maior componente conectado e qualquer componente que NÃO toque a borda do
@@ -84,18 +84,45 @@ FRAMES = {
     'crate_small': (2, 1268, 988, 1380, 1104, {}),
     'crate_mid': (2, 1455, 912, 1562, 1028, {}),
     'shrine': (2, 1680, 782, 1996, 1098, {'keep_all_inner': True}),
+    # ---------------- Floresta / torii (folha 3, fundo verde-claro) ----------------
+    'forest_mixed': (3, 25, 25, 610, 532, {'keep_all_inner': True}),
+    'forest_bamboo_pine': (3, 670, 35, 1238, 398, {'keep_all_inner': True}),
+    'pine': (3, 1166, 210, 1350, 490, {'clip': [(1166, 210, 1212, 330), (1322, 210, 1350, 430)]}),
+    'forest_dark': (3, 1505, 28, 1970, 530, {'keep_all_inner': True}),
+    'bamboo_grove': (3, 22, 495, 312, 832, {'keep_all_inner': True}),
+    'forest_sakura': (3, 296, 398, 812, 952, {'keep_all_inner': True, 'clip': [(296, 815, 405, 952)]}),
+    'forest_broadleaf': (3, 18, 792, 402, 1170, {'keep_all_inner': True, 'clip': [(90, 792, 262, 836)]}),
+    'torii': (3, 858, 392, 1212, 868, {'keep_all_inner': True, 'anchor': (1030, 790)}),
+    'tree_small': (3, 1398, 660, 1558, 840, {}),
+    'forest_pines': (3, 1626, 503, 1974, 864, {'keep_all_inner': True}),
+    'bush_a': (3, 346, 1092, 428, 1175, {}),
+    'bush_big': (3, 484, 962, 628, 1094, {}),
+    'bush_dark': (3, 594, 912, 738, 1038, {}),
+    'bush_round': (3, 698, 866, 812, 988, {}),
+    'rock_moss': (3, 796, 863, 900, 942, {}),
+    'rock_big': (3, 1066, 946, 1152, 1038, {}),
+    'rock_tall': (3, 1278, 830, 1368, 928, {}),
+    'rock_flat': (3, 726, 1132, 858, 1220, {}),
+    'fern': (3, 884, 922, 992, 1012, {}),
+    'fern2': (3, 858, 1182, 982, 1270, {}),
+    'grass_tall': (3, 1348, 792, 1448, 892, {}),
 }
 
+# Cor de fundo de cada folha (as duas primeiras são verde-chroma, a terceira verde-claro).
+SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166)}
 
-def key(rgb):
+
+def key(rgb, bg=BG):
     """Chroma key suave: alfa pela distância à cor de fundo + remoção do verde na borda."""
-    d = np.sqrt(((rgb - BG) ** 2).sum(-1))
-    a = np.clip((d - 70) / 70, 0, 1)
+    bg = np.array(bg, float)
+    d = np.sqrt(((rgb - bg) ** 2).sum(-1))
+    lo, span = (70, 70) if bg[0] < 50 else (22, 40)  # fundo claro: tolerância menor
+    a = np.clip((d - lo) / span, 0, 1)
     safe = np.maximum(a, 1e-3)[..., None]
-    col = (rgb - (1 - a[..., None]) * BG) / safe  # "despremultiplica" o fundo verde
+    col = (rgb - (1 - a[..., None]) * bg) / safe  # "despremultiplica" o fundo verde
     col = np.clip(col, 0, 255)
     # despill extra: verde não pode dominar em pixels semitransparentes
-    semi = a < 0.98
+    semi = (a < 0.98) & (bg[0] < 50)
     g = col[..., 1]
     lim = np.maximum(col[..., 0], col[..., 2]) * 1.15 + 12
     col[..., 1] = np.where(semi & (g > lim), lim, g)
@@ -136,9 +163,9 @@ CHARACTER_PREFIXES = ('boss_', 'hero_', 'ninja_', 'gray_', 'black_')
 ANCHOR_X = {'boss_roar0': 55, 'boss_slam': 50}
 
 
-def extract(sheet, x0, y0, x1, y1, opts, character=False):
+def extract(sheet, x0, y0, x1, y1, opts, character=False, bg=BG):
     rgb = sheet[y0:y1, x0:x1].astype(float)
-    col, a = key(rgb)
+    col, a = key(rgb, bg)
     if character:
         # Personagens não têm verde legítimo: remove o "vazamento" verde do JPG em tudo.
         lim = np.maximum(col[..., 0], col[..., 2]) * 1.04 + 6
@@ -197,13 +224,14 @@ def recolor(img, gain, offset):
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
 
 
-def main(boss_path, hero_path):
+def main(boss_path, hero_path, forest_path):
     sheets = {1: np.asarray(Image.open(boss_path).convert('RGB')),
-              2: np.asarray(Image.open(hero_path).convert('RGB'))}
+              2: np.asarray(Image.open(hero_path).convert('RGB')),
+              3: np.asarray(Image.open(forest_path).convert('RGB'))}
     os.makedirs(OUT, exist_ok=True)
     atlas = {}
     for name, (s, x0, y0, x1, y1, opts) in FRAMES.items():
-        img, solid, fixed = extract(sheets[s], x0, y0, x1, y1, opts, name.startswith(CHARACTER_PREFIXES))
+        img, solid, fixed = extract(sheets[s], x0, y0, x1, y1, opts, name.startswith(CHARACTER_PREFIXES), SHEET_BG[s])
         ax, ay = fixed or feet_anchor(solid)
         if name in ANCHOR_X:
             ax = ANCHOR_X[name] / SCALE
@@ -226,4 +254,4 @@ def main(boss_path, hero_path):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])

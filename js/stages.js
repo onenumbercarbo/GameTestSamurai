@@ -7,8 +7,11 @@
  *
  *  path    — polilinha do caminho de terra (também guia a vegetação aleatória)
  *  props   — [tipo, x, y]; para casas, (x, y) é o canto SUL da construção
- *  waves   — encontros: ao chegar perto de `center`, a arena trava (plano fixo
- *            de câmera) e os grupos de inimigos surgem em sequência
+ *  waves   — emboscadas: ao chegar perto de `center`, a arena trava (plano fixo
+ *            de câmera) e os grupos de inimigos surgem em sequência.
+ *            `guard: true` = emboscada opcional que protege um tesouro.
+ *  loot    — ['seal', x, y] selo que abre o portão; ['item', id, x, y] arma/relíquia.
+ *            Ficam nos cantos norte/sul, longe do caminho: é preciso explorar.
  *  shots   — planos de câmera autorais: dentro do raio r, a câmera ancora em `at`
  *  establish — ponto de abertura do plano de estabelecimento (cutscene de entrada)
  */
@@ -59,9 +62,14 @@ const STAGES = [
     ],
     scatter: { seed: 11, count: 10, types: ['sakura', 'crate_small'] },
     shots: [{ at: [8.5, 13.5], r: 3.5, zoom: 1.5, lean: 0.35 }],
+    clear: [[4.5, 4.8, 4.2], [25, 25, 4.2]],
+    loot: [['seal', 4, 4.4], ['item', 'tamahagane', 25.6, 25.6]],
     waves: [
       { center: [8, 23], r: 6.2, groups: [['blue', 'blue', 'blue']] },
       { center: [16, 16], r: 6.5, groups: [['blue', 'blue', 'gray'], ['blue', 'blue']] },
+      { center: [22.6, 9.6], r: 5, groups: [['gray', 'blue', 'blue']] },
+      { center: [5, 5.3], r: 5, guard: true, groups: [['blue', 'gray'], ['blue', 'blue']] },
+      { center: [24.8, 24.8], r: 5, guard: true, groups: [['blue', 'blue', 'gray'], ['gray']] },
     ],
   },
   {
@@ -96,7 +104,11 @@ const STAGES = [
     ],
     scatter: { seed: 5, count: 8, types: ['sakura'] },
     shots: [],
+    clear: [[4.5, 4.5, 4.2], [25, 25, 4.2]],
+    loot: [['seal', 4, 4], ['item', 'omamori', 25.6, 25.2]],
     waves: [
+      { center: [4.8, 4.8], r: 5, guard: true, groups: [['gray', 'gray', 'blue'], ['blue', 'gray']] },
+      { center: [24.8, 24.6], r: 5, guard: true, groups: [['blue', 'blue', 'gray', 'gray']] },
       { center: [8, 22], r: 6, groups: [['blue', 'gray', 'blue']] },
       { center: [15, 15], r: 6.5, groups: [['blue', 'blue', 'gray'], ['gray', 'gray', 'blue']] },
       { center: [23, 8.5], r: 6, groups: [['blue', 'gray', 'blue', 'blue']] },
@@ -125,9 +137,12 @@ const STAGES = [
       ['crate_small', 10.4, 17.4], ['crate', 18, 16.5],
     ],
     scatter: { seed: 7, count: 95, types: ['bamboo', 'bamboo', 'bamboo', 'bamboo', 'sakura'] },
-    clear: [[7, 21.5, 3.6], [14.5, 14, 4.4], [22, 8, 3.8], [2.5, 27, 2.5], [27, 3, 2.5]],
+    clear: [[7, 21.5, 3.6], [14.5, 14, 4.4], [22, 8, 3.8], [2.5, 27, 2.5], [27, 3, 3.2], [4.5, 4.5, 4], [25, 25, 4]],
     shots: [],
+    loot: [['seal', 4.2, 4.2], ['item', 'nodachi', 25.4, 25.6]],
     waves: [
+      { center: [4.8, 4.8], r: 4.8, guard: true, groups: [['black', 'gray'], ['black', 'blue']] },
+      { center: [24.8, 25], r: 4.8, guard: true, groups: [['gray', 'gray', 'black'], ['blue', 'black']] },
       { center: [7, 21.5], r: 5.5, groups: [['blue', 'black']] },
       { center: [14.5, 14], r: 6, groups: [['gray', 'gray', 'black'], ['black', 'blue', 'gray']] },
       { center: [22, 8], r: 5.5, groups: [['black', 'black', 'gray', 'gray']] },
@@ -165,7 +180,11 @@ const STAGES = [
     ],
     scatter: { seed: 3, count: 8, types: ['crate_small', 'crate', 'bamboo'] },
     shots: [],
+    clear: [[4.5, 4.5, 4.2], [25, 25, 4.2]],
+    loot: [['seal', 4, 4], ['item', 'iai', 25.6, 25.6]],
     waves: [
+      { center: [4.8, 4.8], r: 5, guard: true, groups: [['black', 'black', 'gray'], ['blue', 'blue', 'gray']] },
+      { center: [24.8, 24.8], r: 5, guard: true, groups: [['gray', 'black', 'blue'], ['black', 'gray', 'gray']] },
       { center: [10.5, 20], r: 6, groups: [['blue', 'blue', 'gray'], ['black', 'blue']] },
       { center: [17, 15], r: 6.2, groups: [['gray', 'gray', 'blue'], ['black', 'black', 'blue']] },
       { center: [21.5, 10], r: 6, groups: [['blue', 'gray', 'black', 'blue'], ['gray', 'black', 'gray']] },

@@ -14,7 +14,23 @@ Abra `index.html` no navegador. Não precisa de build nem de servidor.
 | Corte (combo de 3 golpes: Kesa-giri → Gyaku-kesa → giro Enten-giri) | Clique esquerdo |
 | Dash (esquiva invulnerável, cancela ataques) | `Espaço` / `Shift` |
 | Investida (ataque logo após o dash) | Dash + clique |
-| Pausa / Som / Debug | `Esc` ou `P` / `M` / `F3` |
+| Iaijutsu, golpe pesado (precisa do pergaminho) | Botão direito |
+| Pausa e tesouros / Som / Debug | `Esc` ou `P` / `M` / `F3` |
+
+O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência de mira o vira para o inimigo mais próximo; parado e sem inimigos por perto, ele segue o mouse.
+
+## Exploração
+
+Cada vila tem o **selo do portão** (ofuda) escondido num canto do mapa. O torii de saída fica selado até você achar o selo e vencer as emboscadas do caminho. No canto oposto há um **tesouro** protegido por guardiões:
+
+| Vila | Tesouro | Efeito |
+|---|---|---|
+| Kiriyama | Katana Tamahagane | dano +30% |
+| Hanamura | Omamori de Proteção | vida máxima +30 |
+| Sagino | Nodachi do Vento | alcance +25%; o giro final lança ondas de vento |
+| Kurogane | Pergaminho do Iaijutsu | botão direito: saque relâmpago |
+
+O minimapa (canto inferior direito) mostra só o que você já explorou; tesouros e emboscadas aparecem nele quando você chega perto. Caixas soltas quebram com a espada e às vezes guardam onigiri.
 
 ## Jornada
 
@@ -56,7 +72,7 @@ js/ui.js / main.js         HUD, telas, cutscenes, diretor de câmera e game loop
 ### Regerar os sprites
 
 ```bash
-python3 tools/extract_sprites.py caminho/folha_boss.jpg caminho/folha_heroi.jpg
+python3 tools/extract_sprites.py caminho/folha_boss.jpg caminho/folha_heroi.jpg caminho/folha_floresta.jpg
 ```
 
 Requer Pillow e NumPy. Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.

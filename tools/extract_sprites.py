@@ -285,6 +285,44 @@ def recolor(img, gain, offset):
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
 
 
+def hair_to_black(img):
+    """Cabelo do rōnin: laranja/ruivo -> preto azulado, mantendo luz e sombra.
+
+    O cabelo é separado do resto pela cor: matiz laranja (≈8°–32°), bem
+    saturado e só na parte de cima do sprite. Isso deixa de fora o kimono
+    (vermelho carmim, matiz < 8°), a pele (pouco saturada), as sandálias
+    (embaixo) e o brilho amarelo dos cortes (matiz > 32°).
+    """
+    a = np.asarray(img).astype(float)
+    rgb, alpha = a[..., :3], a[..., 3:]
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    mx = rgb.max(-1)
+    mn = rgb.min(-1)
+    sat = np.where(mx > 0, (mx - mn) / np.maximum(mx, 1), 0)
+    hue = np.where(mx == r, (60 * (g - b) / np.maximum(mx - mn, 1)) % 360, 0)
+    h = rgb.shape[0]
+    rows = np.arange(h)[:, None] < h * 0.78
+    # tons laranja vivos + sombras marrom-avermelhadas (verde > azul = cor "quente");
+    # o carmim do kimono tem azul >= verde e fica de fora
+    warm_shadow = (hue < 8) & (g >= b + 4) & (sat > 0.45) & (r > 35)
+    hair = (((hue >= 8) & (hue <= 32) & (sat > 0.5) & (r > 70)) | warm_shadow) & rows & (mx == r)
+    # fios vermelhos DENTRO do cabelo: viram cabelo só se a vizinhança 5×5 já
+    # for, em boa parte, cabelo (assim o kimono, que é uma área contínua, fica de fora)
+    red = ((hue < 12) | (hue > 348)) & (sat > 0.4) & (mx == r) & rows & (alpha[..., 0] > 0)
+    for _ in range(2):
+        count = np.zeros(hair.shape)
+        hf = hair.astype(float)
+        for dy in (-2, -1, 0, 1, 2):
+            for dx in (-2, -1, 0, 1, 2):
+                count += np.roll(np.roll(hf, dy, 0), dx, 1)
+        hair = hair | (red & (count >= 9))
+    lum = 0.3 * r + 0.59 * g + 0.11 * b
+    v = lum * 0.38 + 8
+    black = np.stack([v * 0.95, v * 0.97, v * 1.12], -1)
+    out = np.where(hair[..., None], black, rgb)
+    return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
+
+
 def main(*paths):
     # folhas: 1 boss, 2 herói/ninjas/casas, 3 floresta, 4 acampamento, 5 mini-chefes
     sheets = {i + 1: np.asarray(Image.open(p).convert('RGB')) for i, p in enumerate(paths)}
@@ -300,6 +338,8 @@ def main(*paths):
         w, h = img.size
         nw, nh = max(1, round(w * SCALE)), max(1, round(h * SCALE))
         img = img.resize((nw, nh), Image.LANCZOS)
+        if name.startswith('hero_'):
+            img = hair_to_black(img)  # o rōnin agora tem cabelo preto
         img.save(os.path.join(OUT, name + '.png'), optimize=True)
         atlas[name] = {'w': nw, 'h': nh, 'ax': round(ax * SCALE, 1), 'ay': round(ay * SCALE, 1)}
         print(f'{name:14s} {nw:4d}x{nh:<4d} anchor=({atlas[name]["ax"]}, {atlas[name]["ay"]})')

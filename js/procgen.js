@@ -7,9 +7,11 @@
  * semente nova e geramos:
  *
  *   1. o CAMINHO: polilinha do canto oeste ao canto leste, com curvas aleatórias;
- *   2. as EMBOSCADAS: em pontos sorteados ao longo do caminho (~28%, 52%, 76%);
- *   3. os ACAMPAMENTOS: um de cada lado do caminho (norte e sul), longe dele;
- *   4. os BAÚS: selo do portão num acampamento, tesouro no outro (lado sorteado);
+ *   2. as EMBOSCADAS: espalhadas ao longo do caminho;
+ *   3. os ACAMPAMENTOS: dos dois lados do caminho, longe dele e uns dos outros,
+ *      cada um ligado ao caminho por uma TRILHA estreita;
+ *   4. os BAÚS: selo do portão num acampamento, tesouro em outro, comida nos demais;
+ *   4b. a ARENA DO MINI-CHEFE: perto do fim do caminho, guardando o portão;
  *   5. as CASAS: encostadas no caminho, sem invadi-lo nem umas às outras;
  *   6. lanternas, caixas, fumaça e o ponto do plano de abertura.
  *
@@ -61,6 +63,8 @@ const ProcGen = (() => {
   function generate(tpl, seed) {
     const rnd = makeRng(seed);
     const [W, H] = tpl.size;
+    const A = (W * H) / 900; // fator de área em relação à vila original (30×30)
+    const L = Math.sqrt(A);
     const between = (a, b) => a + rnd() * (b - a);
     const pick = (list) => list[Math.floor(rnd() * list.length)];
 
@@ -68,10 +72,10 @@ const ProcGen = (() => {
     const start = [between(2.2, 3.5), H - between(2.2, 3.5)];
     const end = [W - between(2.6, 3.4), between(2.6, 3.4)];
     const path = [[start[0] - 1.5, start[1] + 1.5], start];
-    const n = 5;
+    const n = Math.round(5 * L);
     for (let k = 1; k <= n; k++) {
       const t = k / (n + 1);
-      const off = (rnd() - 0.5) * 7.5; // desvio perpendicular (ao longo de (1,1)/√2)
+      const off = (rnd() - 0.5) * 7.5 * Math.min(2.2, L); // desvio perpendicular (ao longo de (1,1)/√2)
       const x = start[0] + (end[0] - start[0]) * t + off * Math.SQRT1_2;
       const y = start[1] + (end[1] - start[1]) * t + off * Math.SQRT1_2;
       path.push([clamp(x, 3, W - 3), clamp(y, 3, H - 3)]);
@@ -79,59 +83,99 @@ const ProcGen = (() => {
     path.push(end, [end[0] + 1.5, end[1] - 1.5]);
     const exit = [end[0], end[1] + 0.2];
 
-    // 2. Emboscadas no caminho.
+    // 2. Emboscadas no caminho (grupos do modelo, em ciclo).
     const waves = [];
-    const fracs = [0.28, 0.52, 0.76];
-    tpl.ambushes.forEach((groups, i) => {
-      const p = pointAt(path, fracs[i] + (rnd() - 0.5) * 0.06);
+    const nAmb = tpl.ambushCount || tpl.ambushes.length;
+    const tEnd = tpl.miniboss ? 0.78 : 0.82;
+    for (let i = 0; i < nAmb; i++) {
+      const groups = tpl.ambushes[i % tpl.ambushes.length];
+      const t = 0.12 + (tEnd - 0.12) * (nAmb === 1 ? 0.5 : i / (nAmb - 1)) + (rnd() - 0.5) * 0.03;
+      const p = pointAt(path, t);
       waves.push({ center: [p.x, p.y], r: groups.flat().length > 4 ? 6.3 : 5.8, groups });
-    });
+    }
 
-    // 3. Acampamentos: o lugar mais afastado do caminho em cada lado.
+    // 2b. Arena do mini-chefe, perto do portão.
+    let boss = null;
+    if (tpl.miniboss) {
+      const p = pointAt(path, 0.9);
+      boss = { id: tpl.miniboss, mini: true, center: [p.x, p.y], spawn: [p.x + p.dx * 2.5, p.y + p.dy * 2.5], triggerR: 6.5, arenaR: 7.2, adds: tpl.bossAdds || [] };
+    }
+
+    // 3. Acampamentos: alternando os lados, longe do caminho e uns dos outros.
+    const nCamps = tpl.campCount || tpl.camps.length;
+    const camps = [];
     const campSpot = (north) => {
-      let best = null, bestD = -1;
-      for (let k = 0; k < 140; k++) {
+      let best = null, bestScore = -1;
+      for (let k = 0; k < 160 * A; k++) {
         const x = between(4.5, W - 4.5), y = between(4.5, H - 4.5);
         const side = x + y < (W + H) / 2 - 2;
         if (side !== north) continue;
-        const d = distToPath(path, x, y);
         if (waves.some((wv) => Math.hypot(wv.center[0] - x, wv.center[1] - y) < 9)) continue;
-        if (d > bestD) { bestD = d; best = [x, y]; }
+        if (boss && Math.hypot(boss.center[0] - x, boss.center[1] - y) < 12) continue;
+        const d = distToPath(path, x, y);
+        if (d < 7) continue;
+        const sep = Math.min(99, ...camps.map((c) => Math.hypot(c[0] - x, c[1] - y)));
+        const score = Math.min(d, 14) + Math.min(sep, 18) * 1.4;
+        if (score > bestScore) { bestScore = score; best = [x, y]; }
       }
       return best || (north ? [5, 5] : [W - 5, H - 5]);
     };
-    const camps = [campSpot(true), campSpot(false)];
-    tpl.camps.forEach((groups, i) => waves.push({ center: camps[i], r: 5, guard: true, groups }));
+    for (let i = 0; i < nCamps; i++) camps.push(campSpot(i % 2 === 0));
+    camps.forEach((c, i) => waves.push({ center: c, r: 5, guard: true, groups: tpl.camps[i % tpl.camps.length] }));
 
-    // 4. Baús: selo num acampamento, tesouro no outro (sorteado).
-    const sealFirst = rnd() < 0.5;
+    // Trilhas: do ponto mais próximo do caminho até cada acampamento.
+    const trails = camps.map((c) => {
+      let bt = 0, bd = Infinity;
+      for (let t = 0; t <= 1; t += 0.01) {
+        const q = pointAt(path, t);
+        const d = Math.hypot(q.x - c[0], q.y - c[1]);
+        if (d < bd) { bd = d; bt = t; }
+      }
+      const q = pointAt(path, bt);
+      const pts = [[q.x, q.y]];
+      for (const f of [0.35, 0.7]) {
+        const x = q.x + (c[0] - q.x) * f, y = q.y + (c[1] - q.y) * f;
+        const nx = -(c[1] - q.y) / bd, ny = (c[0] - q.x) / bd;
+        const off = (rnd() - 0.5) * 3;
+        pts.push([clamp(x + nx * off, 2, W - 2), clamp(y + ny * off, 2, H - 2)]);
+      }
+      // termina antes da fogueira (o acampamento fica numa clareira)
+      pts.push([c[0] + (q.x - c[0]) * (2.2 / bd), c[1] + (q.y - c[1]) * (2.2 / bd)]);
+      return pts;
+    });
+
+    // 4. Baús: selo num acampamento, tesouro em outro, comida nos demais.
+    const order = camps.map((_, i) => i).sort(() => rnd() - 0.5);
     const chestAt = (c) => {
       const a = between(-Math.PI * 0.95, -Math.PI * 0.55); // atrás da fogueira (lado norte)
       return [c[0] + Math.cos(a) * 1.7, c[1] + Math.sin(a) * 1.7];
     };
     const loot = [];
-    if (tpl.seal !== false) {
-      const s = chestAt(camps[sealFirst ? 0 : 1]);
-      loot.push(['seal', s[0], s[1]]);
-    }
-    if (tpl.item) {
-      const s = chestAt(camps[sealFirst ? 1 : 0]);
-      loot.push(['item', tpl.item, s[0], s[1]]);
-    }
+    order.forEach((ci, k) => {
+      const s = chestAt(camps[ci]);
+      if (k === 0 && tpl.seal !== false) loot.push(['seal', s[0], s[1]]);
+      else if (k === 1 && tpl.item) loot.push(['item', tpl.item, s[0], s[1]]);
+      else loot.push(['food', s[0], s[1]]);
+    });
 
     // Áreas que devem ficar livres de casas e vegetação.
     const clear = [
       [start[0], start[1], 3], [exit[0], exit[1], 3.4],
       ...camps.map((c) => [c[0], c[1], 4.4]),
+      ...(boss ? [[boss.center[0], boss.center[1], 7.5]] : []),
     ];
     const keepOut = (x, y, r = 0) => clear.some((c) => Math.hypot(x - c[0], y - c[1]) < c[2] + r);
 
     // Praça de pedra numa das emboscadas (o "centro da vila").
     const plazas = [];
     if (tpl.plaza) {
-      const wv = waves[1];
-      plazas.push([wv.center[0] + between(-0.6, 0.6), wv.center[1] + between(-0.6, 0.6), between(2.1, 2.6)]);
+      for (const k of [1, Math.floor(nAmb / 2) + 1]) {
+        const wv = waves[Math.min(k, nAmb - 1)];
+        plazas.push([wv.center[0] + between(-0.6, 0.6), wv.center[1] + between(-0.6, 0.6), between(2.1, 2.6)]);
+      }
     }
+    // Campo de duelo do mini-chefe.
+    if (boss) plazas.push([boss.center[0], boss.center[1], 5.2]);
 
     // 5. Casas ao longo do caminho.
     const props = [];
@@ -164,17 +208,19 @@ const ProcGen = (() => {
         }
       }
     }
-    const houseCount = Math.round(between(tpl.houses.count[0], tpl.houses.count[1] + 0.99));
+    const houseCount = Math.round(between(tpl.houses.count[0], tpl.houses.count[1] + 0.99) * A);
     let placed = 0;
-    for (let k = 0; k < 400 && placed < houseCount; k++) {
+    for (let k = 0; k < 500 * A && placed < houseCount; k++) {
       const type = pick(tpl.houses.types);
       const p = pointAt(path, between(0.08, 0.92));
       const side = rnd() < 0.5 ? -1 : 1;
       // perpendicular ao caminho (no plano do mundo)
       const nx = -p.dy * side, ny = p.dx * side;
-      const d = between(2.4, 5.2);
+      // a maioria colada no caminho; algumas mais afastadas (sítios e casas isoladas)
+      const d = rnd() < 0.7 ? between(2.4, 5.2) : between(6, 14);
       // o apoio da casa é o canto SUL: empurra para que a caixa fique ao lado do caminho
       const x = p.x + nx * d + (side > 0 ? 1.8 : 0.4), y = p.y + ny * d + (side > 0 ? 1.8 : 0.4);
+      if (trails.some((tr) => boxPathDist(tr, new Prop(type, x, y).box) < 1.6)) continue;
       if (tryPlace(type, x, y, 0.7, 1.4)) {
         placed++;
         // caixas encostadas na frente da casa
@@ -184,14 +230,14 @@ const ProcGen = (() => {
     }
 
     // 6. Lanternas ao longo do caminho e fumaça de casas queimadas.
-    for (let k = 0; k < (tpl.lanterns || 0); k++) {
+    for (let k = 0; k < (tpl.lanterns || 0) * A; k++) {
       const p = pointAt(path, between(0.1, 0.9));
       const side = rnd() < 0.5 ? -1 : 1;
       const x = p.x - p.dy * side * 2.1, y = p.y + p.dx * side * 2.1;
       if (!keepOut(x, y) && boxes.every((b) => boxGap(b, { x0: x, y0: y, x1: x, y1: y }) > 0.8)) props.push(['lantern2', x, y]);
     }
     const smoke = [];
-    for (let k = 0; k < (tpl.smoke || 0) && k < boxes.length; k++) {
+    for (let k = 0; k < (tpl.smoke || 0) * L && k < boxes.length; k++) {
       const b = boxes[Math.floor(rnd() * boxes.length)];
       smoke.push([(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]);
     }
@@ -201,6 +247,9 @@ const ProcGen = (() => {
       ...tpl,
       seed,
       seal: tpl.seal !== false,
+      boss,
+      trails,
+      decor: Math.round(26 * A),
       start,
       exit,
       path,
@@ -210,7 +259,7 @@ const ProcGen = (() => {
       loot,
       smoke,
       clear: [...clear, ...waves.map((wv) => [wv.center[0], wv.center[1], wv.guard ? 4.2 : 2.4])],
-      scatter: tpl.scatter ? { ...tpl.scatter, seed: Math.floor(rnd() * 1e6) } : null,
+      scatter: tpl.scatter ? { ...tpl.scatter, count: Math.round(tpl.scatter.count * A), seed: Math.floor(rnd() * 1e6) } : null,
       establish: shrineAt ? [shrineAt[0] + 1, shrineAt[1] + 1, 1.05] : [mid.x, mid.y, 1.1],
       shots: shrineAt ? [{ at: [shrineAt[0] + 1, shrineAt[1] + 1], r: 3.2, zoom: 1.8, lean: 0.4 }] : [],
     };

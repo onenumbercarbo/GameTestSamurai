@@ -6,11 +6,14 @@
  * grupos de inimigos, tesouro). Caminho, casas, emboscadas, acampamentos,
  * baús e reféns mudam a cada vez que o jogador entra.
  *
- *  ambushes — grupos de cada emboscada do caminho (3). Cada lista interna é um
+ *  ambushes — grupos das emboscadas do caminho (em ciclo; `ambushCount` define quantas). Cada lista interna é um
  *             grupo; todos já estão no mapa, escondidos atrás de casas/árvores.
- *  camps    — grupos dos 2 acampamentos (norte e sul). O 1º grupo vira bandidos
+ *  camps    — grupos dos acampamentos (em ciclo; `campCount` define quantos). O 1º grupo vira bandidos
  *             bebendo/dormindo em volta da fogueira; os demais ficam de vigia.
- *  item     — tesouro guardado no baú de um dos acampamentos (o outro guarda o selo).
+ *  item     — tesouro guardado no baú de um dos acampamentos (outro guarda o selo,
+ *             os demais guardam comida).
+ *  miniboss — guardião da vila (js/miniboss.js), na arena antes do portão.
+ *  size     — 67×67 tiles: 5× a área da versão original (30×30).
  *
  * O santuário final (boss) continua desenhado à mão.
  */
@@ -35,7 +38,7 @@ const STAGES = [
     procedural: true,
     ground: 'village',
     ambient: 'embers',
-    size: [30, 30],
+    size: [67, 67],
     story: [
       'Japão, 11º ano da Era Meiji. As espadas foram proibidas nas ruas, mas os saqueadores do clã Kurokama não obedecem a lei alguma.',
       'Na noite passada eles invadiram Kiriyama, incendiaram as casas e levaram o Espelho da Lua — a relíquia sagrada que protege a aldeia há trezentos anos.',
@@ -49,6 +52,10 @@ const STAGES = [
     smoke: 3,
     scatter: { count: 12, types: ['sakura', 'sakura', 'crate_small'] },
     item: 'tamahagane',
+    ambushCount: 7,
+    campCount: 5,
+    miniboss: 'oni',
+    bossAdds: ['blue', 'blue', 'gray'],
     ambushes: [
       [['blue', 'blue', 'blue']],
       [['blue', 'blue', 'gray'], ['blue', 'blue']],
@@ -66,7 +73,7 @@ const STAGES = [
     procedural: true,
     ground: 'sakura',
     ambient: 'petals',
-    size: [30, 30],
+    size: [67, 67],
     story: [
       'Hanamura floresce como se nada tivesse acontecido.',
       'Mas os aldeões sussurram: homens de preto atravessaram a vila ao amanhecer, carregando um baú selado com o brasão de uma foice.',
@@ -78,6 +85,10 @@ const STAGES = [
     lanterns: 6,
     scatter: { count: 16, types: ['sakura'] },
     item: 'omamori',
+    ambushCount: 7,
+    campCount: 5,
+    miniboss: 'kuno',
+    bossAdds: ['gray', 'gray', 'blue'],
     ambushes: [
       [['blue', 'gray', 'blue']],
       [['blue', 'blue', 'gray'], ['gray', 'gray', 'blue']],
@@ -95,7 +106,7 @@ const STAGES = [
     procedural: true,
     ground: 'forest',
     ambient: 'leaves',
-    size: [30, 30],
+    size: [67, 67],
     story: [
       'O rastro de sandálias some entre os bambus de Sagino.',
       'O vento faz a floresta inteira sussurrar. Entre os colmos, assassinos do clã esperam com kunais envenenadas.',
@@ -106,6 +117,10 @@ const STAGES = [
     lanterns: 4,
     scatter: { count: 95, types: ['bamboo', 'bamboo', 'bamboo', 'bamboo', 'sakura'] },
     item: 'nodachi',
+    ambushCount: 7,
+    campCount: 5,
+    miniboss: 'monk',
+    bossAdds: ['black', 'gray', 'black'],
     ambushes: [
       [['blue', 'black']],
       [['gray', 'gray', 'black'], ['black', 'blue', 'gray']],
@@ -123,7 +138,7 @@ const STAGES = [
     procedural: true,
     ground: 'camp',
     ambient: 'embers',
-    size: [30, 30],
+    size: [67, 67],
     story: [
       'A vila mineira de Kurogane virou o acampamento do clã Kurokama. Caixas de pólvora e saque se empilham pelas ruas.',
       'Do alto do morro já se vê o santuário abandonado onde vive o líder do clã.',
@@ -136,10 +151,15 @@ const STAGES = [
     smoke: 2,
     scatter: { count: 14, types: ['crate_small', 'crate', 'crate_tied', 'bamboo'] },
     item: 'iai',
+    ambushCount: 8,
+    campCount: 5,
+    miniboss: 'ronin',
+    bossAdds: ['rifle', 'rifle', 'black'],
     ambushes: [
-      [['blue', 'blue', 'gray'], ['black', 'blue']],
-      [['gray', 'gray', 'blue'], ['black', 'black', 'blue']],
-      [['blue', 'gray', 'black', 'blue'], ['gray', 'black', 'gray']],
+      [['blue', 'blue', 'gray'], ['rifle', 'blue']],
+      [['gray', 'gray', 'blue'], ['black', 'rifle', 'blue']],
+      [['blue', 'gray', 'black', 'blue'], ['gray', 'rifle', 'rifle']],
+      [['rifle', 'rifle', 'gray'], ['black', 'blue']],
     ],
     camps: [
       [['black', 'black', 'gray'], ['blue', 'blue', 'gray']],

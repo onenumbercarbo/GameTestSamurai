@@ -28,9 +28,22 @@ Abra `index.html` no navegador do computador ou do celular.
 
 O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência de mira o vira para o inimigo mais próximo; parado e sem inimigos por perto, ele segue o mouse.
 
+## Guardiões das vilas (mini-chefes)
+
+Cada vila tem um guardião na arena de pedra antes do portão. O torii só abre depois que ele cai. Todos têm duas fases, ataques telegrafados no chão, defesa e postura, como o chefe final (`js/miniboss.js`):
+
+| Vila | Guardião | Estilo |
+|---|---|---|
+| Kiriyama | Gōriki, o Oni do Kanabō | golpes pesados, salto com impacto, investida; fase 2: três impactos com onda de choque |
+| Hanamura | Kagerō, a Garra Sombria | kunoichi rápida que se esquiva em vez de bloquear; fase 2: some na fumaça e reaparece atrás de você |
+| Sagino | Jōkai, o Monge Renegado | estocadas de naginata, ceifada e giro; guarda em oração |
+| Kurogane | Kasa no Jūrō, o Rōnin de Palha | duas espadas, investida-relâmpago, golpe do céu; fase 2 chama soldados com rifle |
+
+Em Kurogane também há **soldados com rifle** nas emboscadas: miram (linha vermelha no chão), atiram de longe e usam a baioneta de perto. A bala pode ser rebatida com a espada.
+
 ## Mapas procedurais
 
-As quatro vilas são geradas a cada entrada, inclusive ao tentar de novo após morrer (`js/procgen.js`). O sorteio cobre o traçado do caminho, as casas, os pontos de emboscada, os dois acampamentos, qual deles guarda o selo, os reféns e a vegetação. Nome, história, tipos de casa, grupos de inimigos e tesouro de cada vila vêm do modelo em `js/stages.js`. O santuário do boss é fixo; só a vegetação muda.
+As quatro vilas têm 67×67 tiles (5× a área original) e são geradas a cada entrada, inclusive ao tentar de novo após morrer (`js/procgen.js`). O sorteio cobre o traçado do caminho, as casas, as 7–8 emboscadas, os 5 acampamentos (ligados ao caminho por trilhas), os baús (um com o selo, um com o tesouro, os demais com comida), os reféns, a arena do guardião e a vegetação. Nome, história, tipos de casa, grupos de inimigos e tesouro de cada vila vêm do modelo em `js/stages.js`. O santuário do boss é fixo; só a vegetação muda.
 
 ## Exploração
 
@@ -92,7 +105,7 @@ js/ui.js / main.js         HUD, telas, cutscenes, diretor de câmera e game loop
 ### Regerar os sprites
 
 ```bash
-python3 tools/extract_sprites.py folha_boss.jpg folha_heroi.jpg folha_floresta.jpg folha_acampamento.jpg
+python3 tools/extract_sprites.py folha_boss.jpg folha_heroi.jpg folha_floresta.jpg folha_acampamento.jpg folha_minichefes.jpg
 ```
 
 Requer Pillow e NumPy. Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.

@@ -199,13 +199,19 @@ class Cutscene {
     if (hp !== undefined) w.player.hp = Math.min(hp, w.player.maxHp);
 
     if (stage.exit) w.gate = new ToriiGate(stage.exit[0], stage.exit[1], w.level);
-    if (stage.boss) w.boss = new Boss(w, stage.boss.spawn[0], stage.boss.spawn[1]);
+    if (stage.boss) {
+      w.boss = stage.boss.mini
+        ? new MiniBoss(w, stage.boss.spawn[0], stage.boss.spawn[1], stage.boss.id)
+        : new Boss(w, stage.boss.spawn[0], stage.boss.spawn[1]);
+    }
 
     w.chests = [];
     w.campfires = [];
     // Baús de tesouro (itens já coletados em outra tentativa não reaparecem).
     for (const l of stage.loot || []) {
-      const chest = l[0] === 'seal' ? new Chest(w, l[1], l[2], 'seal') : game.items.includes(l[1]) ? null : new Chest(w, l[2], l[3], 'item', l[1]);
+      const chest = l[0] === 'seal' ? new Chest(w, l[1], l[2], 'seal')
+        : l[0] === 'food' ? new Chest(w, l[1], l[2], 'food')
+          : game.items.includes(l[1]) ? new Chest(w, l[2], l[3], 'food') : new Chest(w, l[2], l[3], 'item', l[1]);
       if (!chest) continue;
       // O baú fica trancado pelo acampamento de guardiões mais próximo.
       let best = null, bd = 7;
@@ -242,6 +248,13 @@ class Cutscene {
     };
 
     w.onLoot = (pk) => {
+      if (pk.kind === 'onigiri') {
+        w.player.heal(40);
+        w.effects.text(pk.x, pk.y, '+40', '#7dff8a', true);
+        Sfx.pickup();
+        w.showBanner('Provisões dos bandidos', { sub: 'Onigiri e chá: +40 de vida', dur: 1.8, y: 0.24 });
+        return;
+      }
       if (pk.kind === 'seal') {
         w.sealFound = true;
         Sfx.gong();
@@ -278,29 +291,43 @@ class Cutscene {
 
     w.objectiveText = () => {
       if (w.relic) return 'Recupere a relíquia no altar';
-      if (w.bossFight) return 'Derrote Gendō: leia os sinais vermelhos no chão e use o dash';
+      if (w.bossFight) return `Derrote ${w.boss.short}: leia os sinais vermelhos no chão e use o dash`;
       if (w.activeArena) {
         const n = w.activeArena.enc.members.filter((e) => e.alive).length;
         return `Derrote os bandidos: ${n} restante${n === 1 ? '' : 's'}`;
       }
       if (w.exitOpen) return 'Siga até o portão torii';
-      if (stage.boss) return stage.objective;
+      if (stage.boss && !stage.boss.mini) return stage.objective;
       const parts = [];
       const req = w.requiredLeft();
       if (req) parts.push(`${req} emboscada${req > 1 ? 's' : ''} no caminho`);
       if (!w.sealFound) parts.push('encontre o baú com o selo do portão (explore o mapa)');
+      if (w.boss && w.boss.mini && w.boss.alive) parts.push(`derrote o guardião ${w.boss.short} perto do portão`);
       return parts.length ? 'Falta: ' + parts.join(' · ') : stage.objective;
     };
 
     w.onBossPhase2 = (b) => {
-      w.showBanner('Gendō entra em fúria!', { color: '#ff6a50', dur: 1.8, y: 0.25 });
+      w.showBanner(`${b.short} entra em fúria!`, { color: '#ff6a50', dur: 1.8, y: 0.25 });
       stage.boss.adds.forEach((type, i) => {
         const p = w.level.randomFreeNear(b.x, b.y, 3, 5.5, w.player);
-        w.spawnQueue.push({ type, x: p.x, y: p.y, delay: 0.5 + i * 0.35 });
+        w.spawnQueue.push({ type, x: p.x, y: p.y, delay: 0.5 + i * 0.35, add: true });
       });
     };
 
     w.onBossDefeated = (b) => {
+      if (b.mini) {
+        // Guardião da vila: câmera lenta curta, reforços caem, sobra comida.
+        w.bossFight = false;
+        w.slowmoLeft = 1.1;
+        w.camera.shake(10);
+        for (const e of w.enemies) if (e.alive && e.isAdd) e.takeHit({ damage: 999, nx: 0, ny: 0, knockback: 0 });
+        w.spawnQueue = [];
+        Sfx.gong();
+        w.pickups.push(new Pickup(w, b.x + 0.6, b.y + 0.4, 'onigiri'), new Pickup(w, b.x - 0.5, b.y + 0.7, 'onigiri'));
+        w.cutscene = new Cutscene([{ x: () => b.x, y: () => b.y, zoom: 2.4, rate: 2.5, dur: 1.8 }]);
+        w.showBanner(`${b.short} foi derrotado`, { kanji: '勝', sub: 'O guardião da vila caiu', dur: 2.4, color: '#ffcf6a' });
+        return;
+      }
       w.bossFight = false;
       w.slowmoLeft = 1.6;
       w.camera.shake(14);
@@ -532,7 +559,7 @@ class Cutscene {
     }
 
     // O portão abre quando as emboscadas do caminho caíram e o selo foi achado.
-    if (stage.exit && !w.exitOpen && !w.activeArena && w.requiredLeft() === 0 && w.sealFound) {
+    if (stage.exit && !w.exitOpen && !w.activeArena && w.requiredLeft() === 0 && w.sealFound && !(w.boss && w.boss.alive)) {
       w.exitOpen = true;
       w.gate.open = true;
       w.showBanner('O portão está aberto', { sub: 'Siga até o torii para a próxima vila', dur: 2.6, color: '#ffcf6a' });
@@ -553,7 +580,7 @@ class Cutscene {
         w.cutscene = new Cutscene([
           {
             x: () => b.x, y: () => b.y, zoom: 2.4, rate: 2.2, dur: 1.4,
-            onStart: () => w.showBanner('Gendō', { kanji: '黒鎌の玄道', sub: 'O Ceifador de Kurokama — líder do clã', dur: 3.4, y: 0.26 }),
+            onStart: () => w.showBanner(b.short, { kanji: b.kanji, sub: b.title, dur: 3.4, y: 0.26 }),
           },
           { x: () => b.x, y: () => b.y, zoom: 2.7, rate: 3, dur: 1.7, onStart: () => b.awaken() },
           { x: () => (b.x + p.x) / 2, y: () => (b.y + p.y) / 2, zoom: 1.8, rate: 3, dur: 0.5 },
@@ -590,7 +617,11 @@ class Cutscene {
     w.player.update(dt, input);
 
     for (const s of w.spawnQueue) s.delay -= dt;
-    for (const s of w.spawnQueue.filter((q) => q.delay <= 0)) w.enemies.push(new Ninja(w, s.type, s.x, s.y));
+    for (const s of w.spawnQueue.filter((q) => q.delay <= 0)) {
+      const n = new Ninja(w, s.type, s.x, s.y);
+      n.isAdd = !!s.add;
+      w.enemies.push(n);
+    }
     w.spawnQueue = w.spawnQueue.filter((q) => q.delay > 0);
 
     for (const e of w.enemies) e.update(dt);

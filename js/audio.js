@@ -78,6 +78,7 @@ const Sfx = (() => {
     clang() { tone(1900, 0.25, { type: 'square', gain: 0.05 }); tone(2870, 0.35, { gain: 0.08 }); },
     dash() { noise(0.22, { freq: 500, q: 0.7, gain: 0.25, sweepTo: 2600 }); },
     hurt() { tone(170, 0.28, { type: 'sawtooth', gain: 0.18, slideTo: 60 }); noise(0.1, { type: 'lowpass', freq: 600, gain: 0.5 }); },
+    shot() { noise(0.18, { type: 'lowpass', freq: 2400, gain: 0.7, sweepTo: 300 }); tone(90, 0.15, { type: 'square', gain: 0.12, slideTo: 40 }); },
     throwK() { noise(0.12, { freq: 3500, q: 2, gain: 0.15, sweepTo: 1500 }); },
     smoke() { noise(0.35, { type: 'lowpass', freq: 900, gain: 0.25, sweepTo: 200 }); },
     roar() {

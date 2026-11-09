@@ -435,17 +435,39 @@ const UI = {
     ctx.save();
     ctx.globalAlpha = 0.9;
     ctx.drawImage(L.miniCanvas, ox - size / 2, oy, L.miniCanvas.width / 2, L.miniCanvas.height / 2);
-    // Névoa nos tiles não explorados.
-    ctx.fillStyle = 'rgba(12,10,8,0.92)';
-    ctx.beginPath();
-    for (let j = 0; j < L.H; j++) {
-      for (let i = 0; i < L.W; i++) {
-        if (w.explored[j * L.W + i]) continue;
-        const a = pt(i, j), b = pt(i + 1, j), c2 = pt(i + 1, j + 1), d = pt(i, j + 1);
-        ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(d.x, d.y); ctx.closePath();
-      }
+    // Névoa nos tiles não explorados: canvas próprio, só "apaga" os tiles recém-vistos.
+    if (!L.fogCanvas || L.fogHw !== hw) {
+      const f = document.createElement('canvas');
+      f.width = L.miniCanvas.width;
+      f.height = L.miniCanvas.height;
+      const g = f.getContext('2d');
+      g.scale(2, 2);
+      g.fillStyle = 'rgba(12,10,8,0.92)';
+      g.fillRect(0, 0, f.width, f.height);
+      L.fogCanvas = f;
+      L.fogHw = hw;
+      L.fogDone = new Uint8Array(L.W * L.H);
     }
-    ctx.fill();
+    {
+      const g = L.fogCanvas.getContext('2d');
+      const lp = (x, y) => ({ x: size / 2 + (x - y) * hw, y: (x + y) * hh });
+      g.save();
+      g.setTransform(2, 0, 0, 2, 0, 0);
+      g.globalCompositeOperation = 'destination-out';
+      g.beginPath();
+      let any = false;
+      for (let n = 0; n < w.explored.length; n++) {
+        if (!w.explored[n] || L.fogDone[n]) continue;
+        L.fogDone[n] = 1;
+        any = true;
+        const i = n % L.W, j = (n / L.W) | 0;
+        const a = lp(i - 0.05, j - 0.05), b = lp(i + 1.05, j - 0.05), c2 = lp(i + 1.05, j + 1.05), d = lp(i - 0.05, j + 1.05);
+        g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(c2.x, c2.y); g.lineTo(d.x, d.y); g.closePath();
+      }
+      if (any) g.fill();
+      g.restore();
+    }
+    ctx.drawImage(L.fogCanvas, ox - size / 2, oy, L.fogCanvas.width / 2, L.fogCanvas.height / 2);
     // Contorno
     const n = pt(0, 0), e = pt(L.W, 0), s2 = pt(L.W, L.H), wv = pt(0, L.H);
     ctx.strokeStyle = 'rgba(243,233,216,0.5)';

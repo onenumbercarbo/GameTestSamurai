@@ -187,10 +187,12 @@ class Level {
       for (let i = 0; i < this.W; i++) {
         const cx = i + 0.5, cy = j + 0.5;
         let t = T_GRASS;
-        const pts = stage.path;
-        for (let k = 0; k < pts.length - 1; k++) {
-          const wob = (hash2(i, j) - 0.5) * 0.5;
-          if (distToSegment(cx, cy, pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) < (stage.pathWidth || 1.3) + wob) t = T_PATH;
+        const wob = (hash2(i, j) - 0.5) * 0.5;
+        for (const [pts, width] of this.lines()) {
+          for (let k = 0; k < pts.length - 1; k++) {
+            if (distToSegment(cx, cy, pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) < width + wob) { t = T_PATH; break; }
+          }
+          if (t === T_PATH) break;
         }
         for (const pl of stage.plazas || []) {
           if (Math.hypot(cx - pl[0], cy - pl[1]) < pl[2]) t = T_STONE;
@@ -245,10 +247,25 @@ class Level {
   /** Grade de bloqueio (para o campo de fluxo da IA). */
   rebuildBlocked() {
     this.blocked = new Uint8Array(this.W * this.H);
-    for (let j = 0; j < this.H; j++) {
-      for (let i = 0; i < this.W; i++) {
+    for (const p of this.solids()) this.markSolid(p);
+  }
+
+  /** Marca só os tiles cobertos por um colisor (rápido mesmo em mapas grandes). */
+  markSolid(p) {
+    const b = p.box;
+    for (let j = Math.max(0, Math.floor(b.y0 - 0.5)); j <= Math.min(this.H - 1, Math.floor(b.y1 + 0.5)); j++) {
+      for (let i = Math.max(0, Math.floor(b.x0 - 0.5)); i <= Math.min(this.W - 1, Math.floor(b.x1 + 0.5)); i++) {
+        if (this.solidDist(p, i + 0.5, j + 0.5) < 0.3) this.blocked[j * this.W + i] = 1;
+      }
+    }
+  }
+
+  /** Recalcula a região de um colisor removido (caixa quebrada). */
+  unmarkRegion(b) {
+    for (let j = Math.max(0, Math.floor(b.y0 - 0.5)); j <= Math.min(this.H - 1, Math.floor(b.y1 + 0.5)); j++) {
+      for (let i = Math.max(0, Math.floor(b.x0 - 0.5)); i <= Math.min(this.W - 1, Math.floor(b.x1 + 0.5)); i++) {
         const cx = i + 0.5, cy = j + 0.5;
-        if (this.solids().some((p) => this.solidDist(p, cx, cy) < 0.3)) this.blocked[j * this.W + i] = 1;
+        this.blocked[j * this.W + i] = this.solids().some((p) => this.solidDist(p, cx, cy) < 0.3) ? 1 : 0;
       }
     }
   }
@@ -265,14 +282,15 @@ class Level {
     p.level = this;
     this.props.push(p);
     this._solids = null;
-    this.rebuildBlocked();
+    if (p.def.solid !== 'none') this.markSolid(p);
     return p;
   }
 
   addPost(x, y, r) {
-    this.posts.push({ def: { solid: 'circle' }, x, y, cx: x, cy: y, r, box: { x0: x - r, y0: y - r, x1: x + r, y1: y + r } });
+    const post = { def: { solid: 'circle' }, x, y, cx: x, cy: y, r, box: { x0: x - r, y0: y - r, x1: x + r, y1: y + r } };
+    this.posts.push(post);
     this._solids = null;
-    this.rebuildBlocked();
+    if (this.blocked) this.markSolid(post);
   }
 
   /**
@@ -323,7 +341,7 @@ class Level {
       prop.target.alive = false;
       this.props = this.props.filter((p) => p !== prop);
       this._solids = null;
-      this.rebuildBlocked();
+      this.unmarkRegion(prop.box);
       w.effects.sparks(prop.cx, prop.cy, Math.atan2(hit.ny, hit.nx), 16, '#8a5a2b', 3);
       w.effects.smoke(prop.cx, prop.cy, 5, '150,120,80', 0.35);
       Sfx.hit(false);
@@ -361,6 +379,15 @@ class Level {
     }
   }
 
+  /** Caminho principal e trilhas secundárias: [pontos, meia-largura]. */
+  lines() {
+    if (!this._lines) {
+      this._lines = [[this.stage.path, this.stage.pathWidth || 1.3]];
+      for (const tr of this.stage.trails || []) this._lines.push([tr, 0.8]);
+    }
+    return this._lines;
+  }
+
   tileAt(x, y) {
     const i = Math.floor(x), j = Math.floor(y);
     if (i < 0 || j < 0 || i >= this.W || j >= this.H) return -1;
@@ -368,9 +395,11 @@ class Level {
   }
 
   nearPath(x, y, d) {
-    const pts = this.stage.path;
-    for (let k = 0; k < pts.length - 1; k++) {
-      if (distToSegment(x, y, pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) < d) return true;
+    for (const [pts, width] of this.lines()) {
+      const dd = d - (1.3 - width); // trilhas são mais estreitas
+      for (let k = 0; k < pts.length - 1; k++) {
+        if (distToSegment(x, y, pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) < dd) return true;
+      }
     }
     return false;
   }
@@ -502,16 +531,19 @@ class Level {
     const W = this.W, H = this.H, HW = Iso.HW, HH = Iso.HH, B = BORDER + 2;
     const st = this.style;
     const ox = (H + 2 * B) * HW, oy = 2 * B * HH;
+    // Mapas grandes: canvas do chão em resolução menor (memória do celular).
+    const RES = W + H > 80 ? 0.6 : 1;
     const c = document.createElement('canvas');
-    c.width = Math.ceil((W + H + 4 * B) * HW);
-    c.height = Math.ceil((W + H + 4 * B) * HH);
+    c.width = Math.ceil((W + H + 4 * B) * HW * RES);
+    c.height = Math.ceil((W + H + 4 * B) * HH * RES);
     const g = c.getContext('2d');
+    this.gRes = RES;
     const hsl = (h, sat, l, a = 1) => `hsla(${h}, ${sat}%, ${l}%, ${a})`;
     const rnd = makeRng(W * 131 + H * 7 + (this.stage.scatter ? this.stage.scatter.seed : 3));
 
     g.fillStyle = hsl(95, 30, 9);
     g.fillRect(0, 0, c.width, c.height);
-    g.setTransform(HW, HH, -HW, HH, ox, oy); // daqui em diante: unidades de MUNDO
+    g.setTransform(HW * RES, HH * RES, -HW * RES, HH * RES, ox * RES, oy * RES); // daqui em diante: unidades de MUNDO
     g.lineCap = 'round';
     g.lineJoin = 'round';
 
@@ -529,7 +561,7 @@ class Level {
     g.filter = 'none';
 
     // Manchas de cor (variação orgânica do capim/terra).
-    for (let k = 0; k < 170; k++) {
+    for (let k = 0; k < 170 * (W * H) / 900; k++) {
       const x = rnd() * W, y = rnd() * H, r = 1.2 + rnd() * 3.5;
       const dl = (rnd() - 0.5) * 12, dh = (rnd() - 0.5) * 18;
       const gr = g.createRadialGradient(x, y, 0, x, y, r);
@@ -540,21 +572,24 @@ class Level {
     }
 
     // Caminho de terra: sombra desfocada + leito + faixa gasta no meio.
-    const pw = (this.stage.pathWidth || 1.3) * 2;
-    const path = () => {
-      g.beginPath();
-      this.stage.path.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-    };
     const P = st.path;
-    g.filter = 'blur(6px)';
-    path(); g.strokeStyle = hsl(P[0], P[1], P[2] - 6, 0.6); g.lineWidth = pw + 0.9; g.stroke();
-    g.filter = 'blur(2px)';
-    path(); g.strokeStyle = hsl(P[0], P[1], P[2]); g.lineWidth = pw; g.stroke();
-    g.filter = 'blur(5px)';
-    path(); g.strokeStyle = hsl(P[0], P[1] - 4, P[2] + 6, 0.5); g.lineWidth = pw * 0.4; g.stroke();
-    g.filter = 'none';
+    for (const [pts, half] of this.lines()) {
+      const pw = half * 2;
+      const path = () => {
+        g.beginPath();
+        pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      };
+      g.filter = 'blur(6px)';
+      path(); g.strokeStyle = hsl(P[0], P[1], P[2] - 6, 0.6); g.lineWidth = pw + 0.9; g.stroke();
+      g.filter = 'blur(2px)';
+      path(); g.strokeStyle = hsl(P[0], P[1], P[2]); g.lineWidth = pw; g.stroke();
+      g.filter = 'blur(5px)';
+      path(); g.strokeStyle = hsl(P[0], P[1] - 4, P[2] + 6, 0.5); g.lineWidth = pw * 0.4; g.stroke();
+      g.filter = 'none';
+    }
     // pedrinhas e marcas de roda ao longo do caminho
     const pts = this.stage.path;
+    const pw = (this.stage.pathWidth || 1.3) * 2;
     for (let k = 0; k < pts.length - 1; k++) {
       const [ax, ay] = pts[k], [bx, by] = pts[k + 1];
       const len = Math.hypot(bx - ax, by - ay);
@@ -602,19 +637,23 @@ class Level {
 
   drawGround(ctx, cam, time) {
     if (!this.groundCanvas) this.buildGround();
-    const c = this.groundCanvas, s = cam.scale;
+    const c = this.groundCanvas, s = cam.scale, R = this.gRes;
     const p0 = cam.worldToScreen(0, 0);
     const dx = p0.x - this.gOx * s, dy = p0.y - this.gOy * s;
+    const k = s / R; // px de tela por px do canvas do chão
     // Desenha só o pedaço visível do canvas do chão.
-    const sx0 = Math.max(0, -dx / s), sy0 = Math.max(0, -dy / s);
-    const sx1 = Math.min(c.width, (cam.viewW - dx) / s), sy1 = Math.min(c.height, (cam.viewH - dy) / s);
+    const sx0 = Math.max(0, -dx / k), sy0 = Math.max(0, -dy / k);
+    const sx1 = Math.min(c.width, (cam.viewW - dx) / k), sy1 = Math.min(c.height, (cam.viewH - dy) / k);
     if (sx1 > sx0 && sy1 > sy0) {
-      ctx.drawImage(c, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 * s, dy + sy0 * s, (sx1 - sx0) * s, (sy1 - sy0) * s);
+      ctx.drawImage(c, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 * k, dy + sy0 * k, (sx1 - sx0) * k, (sy1 - sy0) * k);
     }
     // Detalhes animados (capim balançando, pétalas) por cima, só nos tiles visíveis.
     const m = Iso.HW * 2 * s, B = 4;
-    for (let j = -B; j < this.H + B; j++) {
-      for (let i = -B; i < this.W + B; i++) {
+    const cs = [cam.screenToWorld(0, 0), cam.screenToWorld(cam.viewW, 0), cam.screenToWorld(0, cam.viewH), cam.screenToWorld(cam.viewW, cam.viewH)];
+    const i0 = Math.max(-B, Math.floor(Math.min(...cs.map((q) => q.x))) - 1), i1 = Math.min(this.W + B, Math.ceil(Math.max(...cs.map((q) => q.x))) + 1);
+    const j0 = Math.max(-B, Math.floor(Math.min(...cs.map((q) => q.y))) - 1), j1 = Math.min(this.H + B, Math.ceil(Math.max(...cs.map((q) => q.y))) + 1);
+    for (let j = j0; j < j1; j++) {
+      for (let i = i0; i < i1; i++) {
         const n = hash2(i, j);
         if (n <= 0.55) continue;
         const top = cam.worldToScreen(i, j);

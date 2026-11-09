@@ -117,6 +117,9 @@ class Boss extends Actor {
   constructor(world, x, y) {
     super(world, x, y, 0.55);
     this.name = 'Gendō, o Ceifador de Kurokama';
+    this.short = 'Gendō';
+    this.kanji = '黒鎌の玄道';
+    this.title = 'O Ceifador de Kurokama — líder do clã';
     this.maxHp = 780;
     this.hp = this.maxHp;
     this.phase = 1;

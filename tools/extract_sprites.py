@@ -3,7 +3,7 @@ Extrai os sprites das folhas com fundo verde (chroma key) e gera:
   assets/sprites/<nome>.png  — PNG com transparência, já recortado
   js/atlas.js                — tamanhos e ponto de ancoragem (pés) de cada sprite
 
-Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg>
+Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg>
 
 Cada quadro é definido por um retângulo generoso na folha. Dentro dele mantemos
 o maior componente conectado e qualquer componente que NÃO toque a borda do
@@ -131,10 +131,35 @@ FRAMES = {
     'camp_barrels': (4, 1280, 656, 1434, 828, {'keep_all_inner': True}),
     'camp_firepit': (4, 1178, 818, 1482, 1078, {'keep_all_inner': True}),
     'camp_tent': (4, 1448, 618, 1996, 1068, {'keep_all_inner': True}),
+    # ---------------- Mini-chefes e soldados (folha 5) ----------------
+    'monk_idle': (5, 17, 11, 363, 438, {}),
+    'monk_idle2': (5, 311, 11, 677, 438, {}),
+    'monk_pray': (5, 603, 55, 828, 438, {}),
+    'monk_thrust_w': (5, 846, 83, 1337, 438, {}),
+    'monk_thrust': (5, 1255, 83, 1684, 438, {}),
+    'monk_raise': (5, 1596, 11, 1998, 438, {}),
+    'monk_swing': (5, 1962, 11, 2268, 438, {}),
+    'monk_spin': (5, 2265, 11, 2708, 438, {}),
+    'soldier_aim': (5, 58, 475, 344, 831, {}),
+    'soldier_fire': (5, 322, 475, 638, 831, {}),
+    'soldier_hold': (5, 575, 484, 773, 831, {}),
+    'soldier_bayonet': (5, 837, 484, 1167, 831, {}),
+    'kuno_fist': (5, 1117, 438, 1368, 831, {}),
+    'kuno_stance': (5, 1406, 475, 1690, 831, {}),
+    'kuno_jump': (5, 1709, 482, 1951, 831, {}),
+    'kuno_lunge': (5, 1965, 495, 2240, 831, {}),
+    'kuno_slash': (5, 2199, 495, 2455, 831, {}),
+    'kuno_grab': (5, 2447, 475, 2730, 831, {}),
+    'oni_slam': (5, 699, 1040, 1051, 1492, {'clip': [(919, 1040, 1051, 1245)], 'nohaze': True}),
+    'oni_raise': (5, 1015, 911, 1310, 1439, {'clip': [(1288, 1137, 1310, 1211)]}),
+    'oni_slam2': (5, 1365, 1071, 1706, 1492, {'clip': [(1365, 963, 1706, 1076), (1335, 1159, 1382, 1252), (1365, 1076, 1412, 1137), (1412, 1076, 1437, 1109)], 'nohaze': True}),
+    'ronin_low': (5, 1703, 1098, 2103, 1483, {}),
+    'ronin_dual': (5, 2081, 1101, 2419, 1483, {}),
+    'ronin_raise': (5, 2419, 1054, 2735, 1492, {}),
 }
 
 # Cor de fundo de cada folha (as duas primeiras são verde-chroma, a terceira verde-claro).
-SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9)}
+SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9), 5: (12, 226, 8)}
 
 
 def key(rgb, bg=BG):
@@ -181,7 +206,7 @@ def label(mask):
     return lab, comps
 
 
-CHARACTER_PREFIXES = ('boss_', 'hero_', 'ninja_', 'gray_', 'black_', 'villager_', 'bandit_')
+CHARACTER_PREFIXES = ('boss_', 'hero_', 'ninja_', 'gray_', 'black_', 'villager_', 'bandit_', 'monk_', 'soldier_', 'kuno_', 'oni_', 'ronin_')
 
 # Ajustes manuais de âncora X (em pixels do PNG final) onde a heurística dos pés erra
 # (ex.: explosão no chão do golpe do boss, perna aberta no rugido).
@@ -197,6 +222,11 @@ def extract(sheet, x0, y0, x1, y1, opts, character=False, bg=BG):
         col[..., 1] = np.minimum(col[..., 1], lim)
     for cx0, cy0, cx1, cy1 in opts.get('clip', []):
         a[max(cy0 - y0, 0):max(cy1 - y0, 0), max(cx0 - x0, 0):max(cx1 - x0, 0)] = 0
+    if opts.get('nohaze'):
+        # Remove a "névoa" esverdeada (fumaça/tora atrás do sprite tingida pelo fundo).
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        haze = (g > r + 4) & (g > b + 18)
+        a = np.where(haze, 0, a)
     if opts.get('feather'):
         # Suaviza cortes retos onde o recorte encostou num vizinho da folha.
         h, w = a.shape
@@ -255,11 +285,9 @@ def recolor(img, gain, offset):
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
 
 
-def main(boss_path, hero_path, forest_path, camp_path):
-    sheets = {1: np.asarray(Image.open(boss_path).convert('RGB')),
-              2: np.asarray(Image.open(hero_path).convert('RGB')),
-              3: np.asarray(Image.open(forest_path).convert('RGB')),
-              4: np.asarray(Image.open(camp_path).convert('RGB'))}
+def main(*paths):
+    # folhas: 1 boss, 2 herói/ninjas/casas, 3 floresta, 4 acampamento, 5 mini-chefes
+    sheets = {i + 1: np.asarray(Image.open(p).convert('RGB')) for i, p in enumerate(paths)}
     os.makedirs(OUT, exist_ok=True)
     atlas = {}
     for name, (s, x0, y0, x1, y1, opts) in FRAMES.items():
@@ -288,4 +316,4 @@ def main(boss_path, hero_path, forest_path, camp_path):
 
 
 if __name__ == '__main__':
-    main(*sys.argv[1:5])
+    main(*sys.argv[1:6])

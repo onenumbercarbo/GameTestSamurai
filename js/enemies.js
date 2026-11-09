@@ -25,6 +25,12 @@ const NINJA_TYPES = {
     label: 'Bandido', hp: 42, speed: 3.0, damage: 9, windup: 0.45, range: 1.1, arc: 110, lunge: 6, recover: 0.55,
     sprites: { idle: 'bandit_dance2', walk: ['bandit_dance', 'bandit_dance2'], windup: 'bandit_dance2', strike: 'bandit_dance', hurt: 'bandit_ground' },
   },
+  // Soldado do exército Meiji desertor: atira de longe, baioneta de perto.
+  rifle: {
+    label: 'Soldado', hp: 38, speed: 2.3, damage: 11, windup: 0.5, range: 1.4, arc: 90, lunge: 6, recover: 0.6, ranged: true,
+    shot: { speed: 17, damage: 11, aim: 0.75, style: 'bullet', min: 3, max: 9.5, cd: 2.2 },
+    sprites: { idle: 'soldier_hold', walk: ['soldier_hold', 'soldier_bayonet'], windup: 'soldier_bayonet', strike: 'soldier_bayonet', hurt: 'soldier_hold', aim: 'soldier_aim', throw: 'soldier_fire' },
+  },
   black: {
     label: 'Assassino', hp: 52, speed: 2.5, damage: 13, windup: 0.55, range: 1.3, arc: 120, lunge: 7, recover: 0.6, ranged: true,
     sprites: { idle: 'black_idle', walk: ['black_walk1', 'black_idle', 'black_walk2', 'black_idle'], windup: 'black_raise', strike: 'black_lunge', hurt: 'black_crouch' },
@@ -149,7 +155,7 @@ class Ninja extends Actor {
       case 'chase': {
         this.facing = ang;
         if (!p.alive || w.cutscene) break;
-        if (T.ranged && dist > 3 && dist < 7.5 && this.throwCd <= 0) { this.setState('aim'); break; }
+        if (T.ranged && dist > (T.shot ? T.shot.min : 3) && dist < (T.shot ? T.shot.max : 7.5) && this.throwCd <= 0) { this.setState('aim'); break; }
         if (dist < T.range + 0.35) {
           if (this.attackCd <= 0 && w.attackTokens < CONFIG.MAX_ATTACKERS) {
             this.hasToken = true;
@@ -203,15 +209,18 @@ class Ninja extends Actor {
         }
         break;
 
-      case 'aim':
-        this.facing = ang;
-        if (this.t > 0.5) {
-          w.projectiles.push(new Kunai(w, this.x, this.y, ang, this));
-          Sfx.throwK();
-          this.throwCd = 2.4 + Math.random() * 1.6;
+      case 'aim': {
+        const shot = T.shot;
+        const aimT = shot ? shot.aim : 0.5;
+        if (this.t < aimT * 0.75) this.facing = ang; // trava a mira um pouco antes do disparo
+        if (this.t > aimT) {
+          w.projectiles.push(new Kunai(w, this.x, this.y, this.facing, this, shot));
+          if (shot) { Sfx.shot(); w.camera.shake(2); } else Sfx.throwK();
+          this.throwCd = (shot ? shot.cd : 2.4) + Math.random() * 1.6;
           this.setState('throw');
         }
         break;
+      }
 
       case 'throw':
         if (this.t > 0.35) this.setState('chase');
@@ -237,7 +246,8 @@ class Ninja extends Actor {
       const k = this.t / this.type.windup;
       Ground.telegraph(ctx, cam, () => Ground.sector(ctx, cam, this.x, this.y, this.type.range + 0.35, this.facing, this.type.arc), k);
     } else if (this.state === 'aim') {
-      Ground.telegraph(ctx, cam, () => Ground.lane(ctx, cam, this.x, this.y, this.facing, 6, 0.25), this.t / 0.5);
+      const shot = this.type.shot;
+      Ground.telegraph(ctx, cam, () => Ground.lane(ctx, cam, this.x, this.y, this.facing, shot ? 10 : 6, 0.25), this.t / (shot ? shot.aim : 0.5));
     }
   }
 
@@ -250,8 +260,10 @@ class Ninja extends Actor {
       case 'camp': name = this.campSprite || (this.pose === 'sit' ? S.hurt : S.idle); break;
       case 'alerting': name = S.windup; break;
       case 'chase': name = Math.hypot(this.vx, this.vy) > 0.3 ? S.walk[Math.floor(this.animTime * 9) % S.walk.length] : S.idle; break;
-      case 'windup': case 'aim': name = S.windup; break;
-      case 'strike': case 'throw': name = S.strike; break;
+      case 'windup': name = S.windup; break;
+      case 'aim': name = S.aim || S.windup; break;
+      case 'strike': name = S.strike; break;
+      case 'throw': name = S.throw || S.strike; break;
       case 'recover': case 'hurt': name = S.hurt; break;
       case 'dead':
         name = S.hurt;
@@ -296,13 +308,15 @@ class Ninja extends Actor {
 
 /** Kunai arremessada pelo ninja negro. Pode ser rebatida com um corte! */
 class Kunai {
-  constructor(world, x, y, angle, owner) {
+  constructor(world, x, y, angle, owner, opts = null) {
     this.world = world;
     this.x = x + Math.cos(angle) * 0.4;
     this.y = y + Math.sin(angle) * 0.4;
     this.angle = angle;
-    this.speed = 9;
-    this.life = 1.4;
+    this.speed = opts ? opts.speed : 9;
+    this.damage = opts ? opts.damage : 8;
+    this.style = opts ? opts.style : 'kunai';
+    this.life = opts ? 0.75 : 1.4;
     this.radius = 0.25;
     this.alive = true;
     this.owner = owner;
@@ -333,12 +347,24 @@ class Kunai {
       return;
     }
     if (p.alive && Math.hypot(p.x - this.x, p.y - this.y) < p.radius + 0.15) {
-      if (p.takeHit({ damage: 8, nx: Math.cos(this.angle), ny: Math.sin(this.angle), knockback: 3 })) this.alive = false;
+      if (p.takeHit({ damage: this.damage, nx: Math.cos(this.angle), ny: Math.sin(this.angle), knockback: 3 })) this.alive = false;
     }
   }
 
   draw(ctx, cam) {
     const c = Math.cos(this.angle), s = Math.sin(this.angle);
+    if (this.style === 'bullet') {
+      // bala: risco brilhante
+      const a = cam.worldToScreen(this.x, this.y, 34), b = cam.worldToScreen(this.x - c * 0.9, this.y - s * 0.9, 34);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,220,120,0.9)';
+      ctx.lineWidth = 2.5 * cam.scale;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const tip = cam.worldToScreen(this.x + c * 0.25, this.y + s * 0.25, 30);
     const tail = cam.worldToScreen(this.x - c * 0.25, this.y - s * 0.25, 30);
     const sh = cam.worldToScreen(this.x, this.y);
@@ -413,7 +439,7 @@ class Pickup {
 
   draw(ctx, cam) {
     const s = cam.scale;
-    const bob = Math.sin(this.t * 3) * 3;
+    let bob = Math.sin(this.t * 3) * 3;
     const sh = cam.worldToScreen(this.x, this.y);
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
@@ -424,6 +450,7 @@ class Pickup {
       return;
     }
     if (this.kind === 'onigiri') {
+      if (this.fromChest) bob = 20 + easeOutCubic(Math.min(1, this.t / 0.6)) * 40;
       const c = cam.worldToScreen(this.x, this.y, 12 + bob);
       ctx.fillStyle = '#f7f3ea';
       ctx.beginPath();
@@ -560,7 +587,7 @@ class Chest {
     this.world = world;
     this.x = x;
     this.y = y;
-    this.kind = kind; // 'seal' ou 'item'
+    this.kind = kind; // 'seal', 'item' ou 'food'
     this.id = id;
     this.encounter = null;
     this.opened = false;
@@ -585,7 +612,7 @@ class Chest {
     this.opened = true;
     this.openT = 0;
     Sfx.pickup();
-    const pk = new Pickup(this.world, this.x, this.y, this.kind, this.id);
+    const pk = new Pickup(this.world, this.x, this.y, this.kind === 'food' ? 'onigiri' : this.kind, this.id);
     pk.fromChest = true;
     this.world.pickups.push(pk);
     this.world.effects.sparks(this.x, this.y, -Math.PI * 0.75, 14, '#ffd36a', 3);

@@ -27,12 +27,21 @@ const NINJA_TYPES = {
 };
 
 class Ninja extends Actor {
-  constructor(world, type, x, y) {
+  /**
+   * opts.encounter: se presente, o ninja já começa no mapa, ACAMPADO (parado
+   * ao redor da fogueira ou escondido atrás de uma casa) até o grupo ser
+   * alertado. Sem encounter, surge numa nuvem de fumaça (reforços do boss).
+   */
+  constructor(world, type, x, y, opts = {}) {
     super(world, x, y, 0.3);
     this.type = NINJA_TYPES[type];
     this.kind = type;
     this.hp = this.maxHp = this.type.hp;
-    this.state = 'spawn';
+    this.encounter = opts.encounter || null;
+    this.pose = opts.pose || 'idle'; // 'sit' perto da fogueira, 'idle' de vigia
+    if (opts.face !== undefined) this.facing = opts.face;
+    this.alertT = 0;
+    this.state = this.encounter ? 'camp' : 'spawn';
     this.t = 0;
     this.attackCd = 0.4 + Math.random() * 0.8;
     this.throwCd = 1 + Math.random() * 2;
@@ -41,8 +50,18 @@ class Ninja extends Actor {
     this.hits = new Set();
     this.stunTime = 0;
     this.deadT = 0;
-    world.effects.smoke(x, y, 10, '60,60,70', 0.55);
-    Sfx.smoke();
+    if (!this.encounter) {
+      world.effects.smoke(x, y, 10, '60,60,70', 0.55);
+      Sfx.smoke();
+    }
+  }
+
+  /** O grupo foi descoberto: mostra "!" e parte para cima após um pequeno atraso. */
+  alert(delay) {
+    if (this.state !== 'camp') return;
+    this.state = 'alerting';
+    this.t = -delay;
+    this.alertT = 1.2;
   }
 
   setState(s) {
@@ -61,6 +80,8 @@ class Ninja extends Actor {
   takeHit(hit) {
     if (!this.alive || (this.state === 'spawn' && this.t < 0.3)) return false;
     const w = this.world;
+    // Atacar um bandido acampado acorda o grupo inteiro.
+    if (this.encounter && this.encounter.state === 'idle') w.triggerEncounter(this.encounter);
     this.hp -= hit.damage;
     this.flash = 0.12;
     this.kx += hit.nx * hit.knockback;
@@ -89,6 +110,7 @@ class Ninja extends Actor {
     this.t += dt;
     this.animTime += dt;
     this.flash = Math.max(0, this.flash - dt);
+    this.alertT = Math.max(0, this.alertT - dt);
     this.attackCd -= dt;
     this.throwCd -= dt;
 
@@ -108,6 +130,14 @@ class Ninja extends Actor {
     switch (this.state) {
       case 'spawn':
         if (this.t > 0.45) this.setState('chase');
+        break;
+
+      case 'camp':
+        break; // acampado: parado até o grupo ser alertado
+
+      case 'alerting':
+        this.facing = ang;
+        if (this.t > 0.25) this.setState('chase');
         break;
 
       case 'chase': {
@@ -211,6 +241,8 @@ class Ninja extends Actor {
     let name = S.idle, rotate = 0, alpha = 1;
     switch (this.state) {
       case 'spawn': alpha = clamp((this.t - 0.15) / 0.25, 0, 1); break;
+      case 'camp': name = this.pose === 'sit' ? S.hurt : S.idle; break;
+      case 'alerting': name = S.windup; break;
       case 'chase': name = Math.hypot(this.vx, this.vy) > 0.3 ? S.walk[Math.floor(this.animTime * 9) % 4] : S.idle; break;
       case 'windup': case 'aim': name = S.windup; break;
       case 'strike': case 'throw': name = S.strike; break;
@@ -230,6 +262,20 @@ class Ninja extends Actor {
       tint: warn ? '#ff2a1a' : '#ffffff',
       tintAmount: warn ? 0.18 + 0.14 * Math.sin(this.t * 40) : this.flash * 8,
     });
+    // "!" de alerta (estilo jogos de furtividade).
+    if (this.alertT > 0 && this.alive) {
+      const g = cam.worldToScreen(this.x, this.y, 95 + (1.2 - this.alertT) * 10);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, this.alertT * 2);
+      ctx.font = `900 ${Math.round(26 * Math.min(cam.scale, 1.5))}px ${FONT_UI}`;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#1a0a08';
+      ctx.strokeText('!', g.x, g.y);
+      ctx.fillStyle = '#ff4a3a';
+      ctx.fillText('!', g.x, g.y);
+      ctx.restore();
+    }
     // Barra de vida discreta.
     if (this.alive && this.hp < this.maxHp) {
       const g = cam.worldToScreen(this.x, this.y);
@@ -322,6 +368,7 @@ class Pickup {
     this.y = y;
     this.kind = kind;
     this.id = id;
+    this.fromChest = false; // sai de um baú: sobe e é coletado sozinho
     this.t = 0;
     this.alive = true;
     this.radius = 0.2;
@@ -334,6 +381,13 @@ class Pickup {
   update(dt) {
     this.t += dt;
     const p = this.world.player;
+    if (this.fromChest) {
+      if (this.t > 1.1) {
+        this.alive = false;
+        this.world.onLoot(this);
+      }
+      return;
+    }
     if (!p.alive || this.t < 0.4) return;
     const reach = this.kind === 'onigiri' ? 0.65 : 0.9;
     if (Math.hypot(p.x - this.x, p.y - this.y) < reach) {
@@ -403,6 +457,11 @@ class Pickup {
   drawTreasure(ctx, cam, bob) {
     const s = cam.scale;
     const base = cam.worldToScreen(this.x, this.y);
+    if (this.fromChest) {
+      // Sobe de dentro do baú girando, com brilho.
+      const k = Math.min(1, this.t / 0.6);
+      bob = 20 + easeOutCubic(k) * 40;
+    } else {
     // pedestal
     ctx.fillStyle = '#6d6a63';
     ctx.beginPath();
@@ -413,6 +472,7 @@ class Pickup {
     ctx.beginPath();
     ctx.ellipse(base.x, base.y - 12 * s, 10 * s, 5 * s, 0, 0, Math.PI * 2);
     ctx.fill();
+    }
     // brilho
     const c = cam.worldToScreen(this.x, this.y, 38 + bob * 1.5);
     const gold = this.kind === 'seal' ? '255,235,200' : '255,205,110';
@@ -479,6 +539,195 @@ class Pickup {
       ctx.fillStyle = '#2b1d14';
       ctx.fillRect(-5 * s, -2 * s, 10 * s, 1.5 * s);
       ctx.fillRect(-5 * s, 1 * s, 7 * s, 1.5 * s);
+    }
+    ctx.restore();
+  }
+}
+
+/**
+ * Baú de tesouro (desenhado proceduralmente em isométrico). Fica TRANCADO
+ * enquanto os bandidos acampados que o guardam estiverem de pé; depois o
+ * jogador o abre com E.
+ */
+class Chest {
+  constructor(world, x, y, kind, id) {
+    this.world = world;
+    this.x = x;
+    this.y = y;
+    this.kind = kind; // 'seal' ou 'item'
+    this.id = id;
+    this.encounter = null;
+    this.opened = false;
+    this.openT = 0;
+    this.alive = true;
+    this.box = { x0: x - 0.4, y0: y - 0.3, x1: x + 0.4, y1: y + 0.3 };
+    world.level.addPost(x, y, 0.38);
+  }
+
+  get locked() {
+    return !!this.encounter && this.encounter.state !== 'done';
+  }
+
+  /** Jogador perto o bastante para interagir. */
+  near() {
+    const p = this.world.player;
+    return p.alive && Math.hypot(p.x - this.x, p.y - this.y) < 1.35;
+  }
+
+  open() {
+    if (this.opened || this.locked) return;
+    this.opened = true;
+    this.openT = 0;
+    Sfx.pickup();
+    const pk = new Pickup(this.world, this.x, this.y, this.kind, this.id);
+    pk.fromChest = true;
+    this.world.pickups.push(pk);
+    this.world.effects.sparks(this.x, this.y, -Math.PI * 0.75, 14, '#ffd36a', 3);
+  }
+
+  update(dt) {
+    this.t = (this.t || 0) + dt;
+    if (this.opened) this.openT = Math.min(1, this.openT + dt * 3);
+  }
+
+  draw(ctx, cam) {
+    const s = cam.scale;
+    const hx = 0.36, hy = 0.24, H = 16, L = 7;
+    const P = (dx, dy, z) => cam.worldToScreen(this.x + dx, this.y + dy, z);
+    const quad = (pts, fill) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(20,10,5,0.8)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    };
+    // sombra
+    const c = cam.worldToScreen(this.x, this.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y + 2 * s, 24 * s, 11 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // brilho de "pode abrir"
+    if (!this.opened && !this.locked) {
+      const g = ctx.createRadialGradient(c.x, c.y - 10 * s, 2, c.x, c.y - 10 * s, 50 * s);
+      g.addColorStop(0, `rgba(255,210,110,${0.35 + 0.2 * Math.sin(this.t * 4)})`);
+      g.addColorStop(1, 'rgba(255,210,110,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y - 10 * s, 50 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // corpo: faces sul (+y) e leste (+x) são as visíveis
+    quad([P(-hx, hy, 0), P(hx, hy, 0), P(hx, hy, H), P(-hx, hy, H)], '#7a2a1c');
+    quad([P(hx, hy, 0), P(hx, -hy, 0), P(hx, -hy, H), P(hx, hy, H)], '#5e2015');
+    // faixas douradas
+    ctx.strokeStyle = '#d7a640';
+    ctx.lineWidth = 2 * s;
+    for (const f of [-0.6, 0.6]) {
+      const a = P(hx * f, hy, 0), b = P(hx * f, hy, H);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    if (!this.opened) {
+      // tampa fechada (prisma baixo)
+      quad([P(-hx, hy, H), P(hx, hy, H), P(hx, hy, H + L), P(-hx, hy, H + L)], '#8e3322');
+      quad([P(hx, hy, H), P(hx, -hy, H), P(hx, -hy, H + L), P(hx, hy, H + L)], '#6b2618');
+      quad([P(-hx, -hy, H + L), P(hx, -hy, H + L), P(hx, hy, H + L), P(-hx, hy, H + L)], '#a43d28');
+      // fechadura
+      const k = P(0, hy, H + 2);
+      ctx.fillStyle = this.locked ? '#9aa0a8' : '#f0c25a';
+      ctx.fillRect(k.x - 3 * s, k.y - 4 * s, 6 * s, 7 * s);
+      if (this.locked) {
+        // corrente com selo vermelho: guardado pelos bandidos
+        ctx.strokeStyle = '#3a3a3e';
+        ctx.lineWidth = 2 * s;
+        const a = P(-hx, hy, H + 3), b = P(hx, hy, H + 3);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+    } else {
+      // aberto: interior escuro + tampa levantada atrás
+      quad([P(-hx, -hy, H), P(hx, -hy, H), P(hx, hy, H), P(-hx, hy, H)], '#1d0d08');
+      const up = this.openT;
+      quad([P(-hx, -hy, H), P(hx, -hy, H), P(hx, -hy - 0.05 * up, H + 22 * up), P(-hx, -hy - 0.05 * up, H + 22 * up)], '#a43d28');
+    }
+    // aviso de interação
+    if (!this.opened && this.near()) {
+      const t = cam.worldToScreen(this.x, this.y, 60);
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = `700 ${Math.round(13 * Math.min(s, 1.4))}px ${FONT_UI}`;
+      const msg = this.locked ? 'Trancado: derrote os bandidos do acampamento' : 'E — abrir o baú';
+      const w = ctx.measureText(msg).width + 14;
+      ctx.fillStyle = 'rgba(10,7,6,0.75)';
+      ctx.fillRect(t.x - w / 2, t.y - 15, w, 22);
+      ctx.fillStyle = this.locked ? '#ff9a80' : '#ffcf6a';
+      ctx.fillText(msg, t.x, t.y + 1);
+      ctx.restore();
+    }
+  }
+}
+
+/** Fogueira do acampamento: decorativa, com chama animada e luz. */
+class Campfire {
+  constructor(world, x, y) {
+    this.world = world;
+    this.x = x;
+    this.y = y;
+    this.t = Math.random() * 10;
+    this.alive = true;
+    this.box = { x0: x - 0.3, y0: y - 0.3, x1: x + 0.3, y1: y + 0.3 };
+    this.smokeT = 0;
+    world.level.addPost(x, y, 0.3);
+  }
+
+  update(dt) {
+    this.t += dt;
+    this.smokeT -= dt;
+    if (this.smokeT <= 0) {
+      this.smokeT = 0.25;
+      this.world.effects.puffs.push({ x: this.x, y: this.y, z: 30, vx: 0.15, vy: -0.15, vz: 30, r: 0.18, life: 1.6, max: 1.6, color: '60,55,50' });
+    }
+  }
+
+  draw(ctx, cam) {
+    const s = cam.scale;
+    const c = cam.worldToScreen(this.x, this.y);
+    const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, 70 * s);
+    g.addColorStop(0, `rgba(255,150,60,${0.32 + 0.06 * Math.sin(this.t * 13)})`);
+    g.addColorStop(1, 'rgba(255,150,60,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, 70 * s, 35 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // pedras e lenha
+    ctx.fillStyle = '#5b5750';
+    for (let k = 0; k < 7; k++) {
+      const a = (k / 7) * Math.PI * 2;
+      const p = cam.worldToScreen(this.x + Math.cos(a) * 0.3, this.y + Math.sin(a) * 0.3);
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, 4 * s, 2.6 * s, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = '#4a2c17';
+    ctx.lineWidth = 3.5 * s;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 10 * s, c.y - 1 * s); ctx.lineTo(c.x + 10 * s, c.y - 5 * s);
+    ctx.moveTo(c.x - 9 * s, c.y - 5 * s); ctx.lineTo(c.x + 9 * s, c.y);
+    ctx.stroke();
+    // chamas
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 3; k++) {
+      const h = (16 + 6 * Math.sin(this.t * 9 + k * 2)) * s;
+      const wv = (6 - k * 1.5) * s;
+      const x = c.x + (k - 1) * 4 * s;
+      ctx.fillStyle = k === 1 ? 'rgba(255,220,120,0.9)' : 'rgba(255,110,40,0.75)';
+      ctx.beginPath();
+      ctx.moveTo(x - wv, c.y - 3 * s);
+      ctx.quadraticCurveTo(x - wv, c.y - h * 0.6, x, c.y - h);
+      ctx.quadraticCurveTo(x + wv, c.y - h * 0.6, x + wv, c.y - 3 * s);
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.restore();
   }

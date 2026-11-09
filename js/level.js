@@ -257,6 +257,38 @@ class Level {
     this.rebuildBlocked();
   }
 
+  /**
+   * Pontos "atrás" de casas e árvores grandes (lado norte/oeste, o mais longe
+   * da câmera): quem fica ali some atrás do desenho da construção.
+   */
+  hideSpots(cx, cy, maxR) {
+    const spots = [];
+    for (const p of this.props) {
+      const isBox = p.def.solid === 'box';
+      const big = isBox ? (p.box.x1 - p.box.x0) * (p.box.y1 - p.box.y0) > 1.5 : p.def.solid === 'circle' && p.r >= 0.45;
+      if (!big) continue;
+      const cands = [];
+      if (isBox) {
+        const b = p.box;
+        for (const t of [0.2, 0.5, 0.8]) {
+          cands.push([b.x0 - 0.5, b.y0 + (b.y1 - b.y0) * t]);
+          cands.push([b.x0 + (b.x1 - b.x0) * t, b.y0 - 0.5]);
+        }
+        cands.push([b.x0 - 0.45, b.y0 - 0.45]);
+      } else {
+        for (const da of [-0.7, 0, 0.7]) {
+          const a = -Math.PI * 0.75 + da;
+          cands.push([p.cx + Math.cos(a) * (p.r + 0.45), p.cy + Math.sin(a) * (p.r + 0.45)]);
+        }
+      }
+      for (const [x, y] of cands) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d < maxR && this.isFree(x, y, 0.32)) spots.push({ x, y, d });
+      }
+    }
+    return spots.sort((u, v) => u.d - v.d);
+  }
+
   /** Caixas quebráveis ainda inteiras, como alvos de combate. */
   breakableTargets() {
     return this.props.filter((p) => p.def.breakable && p.hp > 0).map((p) => p.target);

@@ -197,11 +197,22 @@ class Cutscene {
     if (stage.exit) w.gate = new ToriiGate(stage.exit[0], stage.exit[1], w.level);
     if (stage.boss) w.boss = new Boss(w, stage.boss.spawn[0], stage.boss.spawn[1]);
 
-    // Tesouros do mapa (já coletados em outra tentativa não reaparecem).
+    w.chests = [];
+    w.campfires = [];
+    // Baús de tesouro (itens já coletados em outra tentativa não reaparecem).
     for (const l of stage.loot || []) {
-      if (l[0] === 'seal') w.pickups.push(new Pickup(w, l[1], l[2], 'seal'));
-      else if (!game.items.includes(l[1])) w.pickups.push(new Pickup(w, l[2], l[3], 'item', l[1]));
+      const chest = l[0] === 'seal' ? new Chest(w, l[1], l[2], 'seal') : game.items.includes(l[1]) ? null : new Chest(w, l[2], l[3], 'item', l[1]);
+      if (!chest) continue;
+      // O baú fica trancado pelo acampamento de guardiões mais próximo.
+      let best = null, bd = 7;
+      for (const enc of w.encounters) {
+        const d = Math.hypot(enc.center[0] - chest.x, enc.center[1] - chest.y);
+        if (enc.guard && d < bd) { bd = d; best = enc; }
+      }
+      chest.encounter = best;
+      w.chests.push(chest);
     }
+    placeCamps(w, index);
 
     // Névoa do mapa: tiles já vistos (para o minimapa).
     w.explored = new Uint8Array(stage.size[0] * stage.size[1]);
@@ -237,21 +248,32 @@ class Cutscene {
       w.banner = { text, t: 0, dur: opts.dur || 2.2, ...opts };
     };
 
+    /** Descobriram o acampamento: todos os bandidos do grupo partem para o ataque. */
+    w.triggerEncounter = (enc) => {
+      if (enc.state !== 'idle') return;
+      enc.state = 'active';
+      enc.members.forEach((m, i) => m.alert(0.05 + i * 0.07 + Math.random() * 0.12));
+      if (!w.activeArena) w.activeArena = { center: enc.center, r: enc.r, enc };
+      w.showBanner(enc.guard ? 'Acampamento de bandidos!' : 'Emboscada!', { color: '#ff6a50', dur: 1.6, y: 0.24 });
+      Sfx.roar();
+      w.camera.shake(4);
+    };
+
     w.requiredLeft = () => w.encounters.filter((e) => !e.guard && e.state !== 'done').length;
 
     w.objectiveText = () => {
       if (w.relic) return 'Recupere a relíquia no altar';
       if (w.bossFight) return 'Derrote Gendō: leia os sinais vermelhos no chão e use o dash';
       if (w.activeArena) {
-        const n = w.enemies.filter((e) => e.alive).length + w.spawnQueue.length;
-        return `Derrote os saqueadores: ${n} restante${n === 1 ? '' : 's'}`;
+        const n = w.activeArena.enc.members.filter((e) => e.alive).length;
+        return `Derrote os bandidos: ${n} restante${n === 1 ? '' : 's'}`;
       }
       if (w.exitOpen) return 'Siga até o portão torii';
       if (stage.boss) return stage.objective;
       const parts = [];
       const req = w.requiredLeft();
       if (req) parts.push(`${req} emboscada${req > 1 ? 's' : ''} no caminho`);
-      if (!w.sealFound) parts.push('encontre o selo do portão (explore o mapa)');
+      if (!w.sealFound) parts.push('encontre o baú com o selo do portão (explore o mapa)');
       return parts.length ? 'Falta: ' + parts.join(' · ') : stage.objective;
     };
 
@@ -310,6 +332,63 @@ class Cutscene {
     return w;
   }
 
+  /**
+   * Posiciona os bandidos no início da fase, em GRUPOS:
+   *  - acampamento de guardiões: fogueira no centro, primeiro grupo sentado ao redor;
+   *  - demais grupos (e as emboscadas do caminho): escondidos ATRÁS de casas e
+   *    árvores grandes, fora da vista da câmera, prontos para cercar o jogador.
+   */
+  function placeCamps(w, index) {
+    const stage = w.stage, L = w.level;
+    const rnd = makeRng(index * 1013 + 17);
+    const taken = [];
+    const free = (x, y) => L.isFree(x, y, 0.35) && taken.every((t) => Math.hypot(t.x - x, t.y - y) > 0.8)
+      && Math.hypot(x - stage.start[0], y - stage.start[1]) > 4.5;
+    for (const enc of w.encounters) {
+      enc.members = [];
+      const [cx, cy] = enc.center;
+      const groups = enc.groups.map((g) => g.slice());
+      const add = (type, pos, pose, face) => {
+        const n = new Ninja(w, type, pos.x, pos.y, { encounter: enc, pose, face });
+        enc.members.push(n);
+        w.enemies.push(n);
+        taken.push(pos);
+      };
+      const fallback = () => {
+        for (let k = 0; k < 60; k++) {
+          const a = rnd() * Math.PI * 2, r = 1.8 + rnd() * Math.max(0.5, enc.r - 2.6);
+          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+          if (free(x, y)) return { x, y };
+        }
+        return { x: cx + rnd() - 0.5, y: cy + rnd() - 0.5 };
+      };
+      if (enc.guard) {
+        let f = { x: cx, y: cy };
+        if (!L.isFree(cx, cy, 0.7)) f = L.randomFreeNear(cx, cy, 0.3, 1.6);
+        w.campfires.push(new Campfire(w, f.x, f.y));
+        const g = groups.shift();
+        g.forEach((type, i) => {
+          let pos = null;
+          for (let k = 0; k < 10 && !pos; k++) {
+            const a = (i / g.length) * Math.PI * 2 + 0.5 + k * 0.35;
+            const x = f.x + Math.cos(a) * 1.15, y = f.y + Math.sin(a) * 1.15;
+            if (free(x, y)) pos = { x, y };
+          }
+          pos = pos || fallback();
+          add(type, pos, rnd() < 0.6 ? 'sit' : 'idle', Math.atan2(f.y - pos.y, f.x - pos.x));
+        });
+      }
+      const spots = L.hideSpots(cx, cy, enc.r - 0.8);
+      for (const g of groups) {
+        for (const type of g) {
+          const sp = spots.find((q) => free(q.x, q.y));
+          const pos = sp || fallback();
+          add(type, pos, 'idle', Math.atan2(cy - pos.y, cx - pos.x));
+        }
+      }
+    }
+  }
+
   /* ------------------------------ diretor de câmera ------------------------------ */
 
   /**
@@ -366,41 +445,35 @@ class Cutscene {
 
   /* ---------------------------------- atualização ---------------------------------- */
 
-  function queueGroup(w, center, types) {
-    types.forEach((type, i) => {
-      const p = w.level.randomFreeNear(center[0], center[1], 2.8, 5.6, w.player);
-      w.spawnQueue.push({ type, x: p.x, y: p.y, delay: i * 0.28 });
-    });
-  }
-
   function updateEncounters(w, dt) {
     const p = w.player;
     const stage = w.stage;
 
-    // Emboscadas: chegar perto do centro de uma trava a arena (uma por vez).
-    if (!w.activeArena) {
-      const enc = w.encounters.find((e) => e.state === 'idle' && Math.hypot(p.x - e.center[0], p.y - e.center[1]) < e.r - 0.5);
-      if (enc) {
-        enc.state = 'active';
-        w.activeArena = { ...enc, enc, groups: enc.groups.map((g) => g.slice()), delay: 0.5 };
-        const label = enc.guard ? 'Emboscada! Guardiões do tesouro' : 'Emboscada!';
-        w.showBanner(label, { color: '#ff6a50', dur: 1.6, y: 0.24 });
-        Sfx.smoke();
+    // Acampamentos: o grupo percebe o jogador quando ele chega perto do
+    // centro ou de qualquer um dos bandidos (inclusive os escondidos).
+    for (const enc of w.encounters) {
+      if (enc.state !== 'idle' || !p.alive) continue;
+      const d = Math.hypot(p.x - enc.center[0], p.y - enc.center[1]);
+      if (d < enc.r - 1.3 || enc.members.some((m) => m.alive && Math.hypot(m.x - p.x, m.y - p.y) < 3)) w.triggerEncounter(enc);
+    }
+    for (const enc of w.encounters) {
+      if (enc.state === 'active' && enc.members.every((m) => !m.alive)) {
+        enc.state = 'done';
+        if (w.activeArena && w.activeArena.enc === enc) w.activeArena = null;
+        const chest = w.chests.find((c) => c.encounter === enc && !c.opened);
+        w.showBanner('Área limpa', { sub: chest ? 'O baú foi destrancado' : undefined, dur: 1.8, y: 0.24 });
       }
     }
-    if (w.activeArena) {
-      const a = w.activeArena;
-      a.delay -= dt;
-      const alive = () => w.enemies.filter((e) => e.alive).length + w.spawnQueue.length;
-      if (a.groups.length && alive() <= 1 && a.delay <= 0) {
-        queueGroup(w, a.center, a.groups.shift());
-        a.delay = 1.2;
-      }
-      if (!a.groups.length && alive() === 0) {
-        a.enc.state = 'done';
-        w.activeArena = null;
-        w.showBanner('Área limpa', { dur: 1.4, y: 0.24 });
-      }
+    if (!w.activeArena) {
+      const next = w.encounters.find((e) => e.state === 'active');
+      if (next) w.activeArena = { center: next.center, r: next.r, enc: next };
+    }
+
+    // Abrir baús com E.
+    if (input.wasPressed('KeyE', 'KeyF')) {
+      const c = w.chests.find((ch) => !ch.opened && ch.near());
+      if (c && !c.locked) c.open();
+      else if (c) Sfx.clang();
     }
 
     // O portão abre quando as emboscadas do caminho caíram e o selo foi achado.
@@ -473,6 +546,8 @@ class Cutscene {
     for (const pk of w.pickups) pk.update(dt);
     w.pickups = w.pickups.filter((pk) => pk.alive);
     if (w.gate) w.gate.t += dt;
+    for (const c of w.chests) c.update(dt);
+    for (const f of w.campfires) f.update(dt);
 
     // Separação entre corpos.
     const bodies = w.enemies.filter((e) => e.alive);
@@ -563,7 +638,7 @@ class Cutscene {
       if (b.x1 < 0 || b.x0 > cam.viewW || b.y1 < 0 || b.y0 > cam.viewH) continue;
       list.push(pr);
     }
-    list.push(w.player, ...w.enemies, ...w.pickups, ...w.projectiles);
+    list.push(w.player, ...w.enemies, ...w.pickups, ...w.projectiles, ...w.chests, ...w.campfires);
     if (w.boss) list.push(w.boss);
     if (w.gate) list.push(w.gate);
     const sorted = depthSort(list);

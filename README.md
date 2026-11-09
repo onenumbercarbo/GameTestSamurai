@@ -15,13 +15,16 @@ Abra `index.html` no navegador. Não precisa de build nem de servidor.
 | Dash (esquiva invulnerável, cancela ataques) | `Espaço` / `Shift` |
 | Investida (ataque logo após o dash) | Dash + clique |
 | Iaijutsu, golpe pesado (precisa do pergaminho) | Botão direito |
+| Abrir baú | `E` |
 | Pausa e tesouros / Som / Debug | `Esc` ou `P` / `M` / `F3` |
 
 O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência de mira o vira para o inimigo mais próximo; parado e sem inimigos por perto, ele segue o mouse.
 
 ## Exploração
 
-Cada vila tem o **selo do portão** (ofuda) escondido num canto do mapa. O torii de saída fica selado até você achar o selo e vencer as emboscadas do caminho. No canto oposto há um **tesouro** protegido por guardiões:
+Os bandidos já estão no mapa desde o início, em grupos: sentados em volta de fogueiras nos acampamentos, ou escondidos atrás de casas e árvores ao longo do caminho. Quando você chega perto (ou acerta um deles), o grupo inteiro é alertado (aparece um "!" sobre cada um) e parte para o ataque.
+
+Cada vila tem dois acampamentos nos cantos do mapa, cada um guardando um **baú**. O baú fica trancado até você derrotar os bandidos acampados; depois, chegue perto e aperte **E** para abrir. Um baú guarda o **selo do portão** (ofuda): o torii de saída só abre com o selo e com as emboscadas do caminho vencidas. O outro guarda um **tesouro**:
 
 | Vila | Tesouro | Efeito |
 |---|---|---|
@@ -30,7 +33,7 @@ Cada vila tem o **selo do portão** (ofuda) escondido num canto do mapa. O torii
 | Sagino | Nodachi do Vento | alcance +25%; o giro final lança ondas de vento |
 | Kurogane | Pergaminho do Iaijutsu | botão direito: saque relâmpago |
 
-O minimapa (canto inferior direito) mostra só o que você já explorou; tesouros e emboscadas aparecem nele quando você chega perto. Caixas soltas quebram com a espada e às vezes guardam onigiri.
+O minimapa (canto inferior direito) mostra só o que você já explorou; baús e emboscadas aparecem nele quando você chega perto. Caixas soltas quebram com a espada e às vezes guardam onigiri.
 
 ## Jornada
 

@@ -201,7 +201,7 @@ const UI = {
     const lines = [
       'WASD / setas — mover      Mouse — mirar      Clique — corte (3 cliques = combo)',
       'Espaço / Shift — dash (esquiva invulnerável)      Dash + clique — investida      Botão direito — iaijutsu (item)',
-      'Explore os cantos de cada vila: o selo do portão e armas novas estão escondidos',
+      'Explore os cantos de cada vila: bandidos acampados guardam baús com o selo do portão e armas (E abre o baú)',
       'Esc / P — pausa e tesouros      M — som      F3 — debug',
     ];
     ctx.font = `500 13px ${FONT_UI}`;
@@ -337,8 +337,8 @@ const UI = {
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(q.x - 4, q.y - 4); ctx.lineTo(q.x + 4, q.y + 4); ctx.moveTo(q.x + 4, q.y - 4); ctx.lineTo(q.x - 4, q.y + 4); ctx.stroke();
     }
-    for (const pk of w.pickups) {
-      if ((pk.kind === 'seal' || pk.kind === 'item') && seen(pk.x, pk.y)) dot(pk.x, pk.y, 3.5 + Math.sin(w.time * 5), '#ffcf6a');
+    for (const c of w.chests) {
+      if (!c.opened && seen(c.x, c.y)) dot(c.x, c.y, 3.5 + Math.sin(w.time * 5), c.locked ? '#d08a50' : '#ffcf6a');
     }
     if (w.stage.exit) {
       const q = pt(w.stage.exit[0], w.stage.exit[1]);
@@ -347,7 +347,7 @@ const UI = {
       ctx.fillRect(q.x - 3, q.y - 5, 1.5, 7);
       ctx.fillRect(q.x + 1.5, q.y - 5, 1.5, 7);
     }
-    for (const en of w.enemies) if (en.alive) dot(en.x, en.y, 2, '#ff5a4a');
+    for (const en of w.enemies) if (en.alive && en.state !== 'camp') dot(en.x, en.y, 2, '#ff5a4a');
     if (w.boss && w.boss.alive) dot(w.boss.x, w.boss.y, 3.5, '#ff2a1a');
     dot(w.player.x, w.player.y, 3, '#ffffff');
     ctx.restore();

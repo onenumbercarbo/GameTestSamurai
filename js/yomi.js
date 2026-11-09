@@ -27,12 +27,13 @@ const Yomi = (() => {
   const TYPES = {
     ninja: {
       name: 'Ninja', hp: 3, speed: 150, scale: 1, guard: 0.25, gap: 115,
-      sp: { idle: 'ninja_idle', walk: ['ninja_idle', 'ninja_lunge'], wind: 'ninja_raise', act: 'ninja_lunge', hurt: 'ninja_crouch' },
+      side: true, sp: { idle: 'ns_walk0', walk: ['ns_walk0', 'ns_walk1', 'ns_walk2', 'ns_walk3'], wind: 'ns_atk0', act: 'ns_atk2', rec: 'ns_atk1', guard: 'ns_block2', stagger: 'ns_block0', hurt: 'ns_die0', die: ['ns_die0', 'ns_die1', 'ns_die2'] },
       attacks: [{ windup: 0.5, active: 0.12, recover: 0.45, reach: 135, dmg: 12, lunge: 70 }],
     },
     gray: {
       name: 'Ninja cinza', hp: 3, speed: 190, scale: 1, guard: 0.15, gap: 120,
-      sp: { idle: 'gray_idle', walk: ['gray_idle', 'gray_lunge'], wind: 'gray_raise', act: 'gray_strike', hurt: 'gray_crouch' },
+      tone: ['#ffffff', 0.28], // ninja cinza: mais claro
+      side: true, sp: { idle: 'ns_walk0', walk: ['ns_walk0', 'ns_walk1', 'ns_walk2', 'ns_walk3'], wind: 'ns_atk0', act: 'ns_atk2', rec: 'ns_atk1', guard: 'ns_block2', stagger: 'ns_block0', hurt: 'ns_die0', die: ['ns_die0', 'ns_die1', 'ns_die2'] },
       attacks: [
         { windup: 0.38, active: 0.1, recover: 0.4, reach: 130, dmg: 10, lunge: 60 },
         { windup: 0.3, active: 0.1, recover: 0.5, reach: 130, dmg: 9, lunge: 40, chain: 1 },
@@ -40,7 +41,8 @@ const Yomi = (() => {
     },
     black: {
       name: 'Ninja negro', hp: 4, speed: 140, scale: 1.05, guard: 0.45, gap: 125,
-      sp: { idle: 'black_idle', walk: ['black_idle', 'black_lunge'], wind: 'black_raise', act: 'black_lunge', hurt: 'black_crouch' },
+      tone: ['#000000', 0.32], // ninja negro: mais escuro
+      side: true, sp: { idle: 'ns_walk0', walk: ['ns_walk0', 'ns_walk1', 'ns_walk2', 'ns_walk3'], wind: 'ns_atk0', act: 'ns_atk2', rec: 'ns_atk1', guard: 'ns_block2', stagger: 'ns_block0', hurt: 'ns_die0', die: ['ns_die0', 'ns_die1', 'ns_die2'] },
       attacks: [
         { windup: 0.55, active: 0.12, recover: 0.5, reach: 140, dmg: 14, lunge: 80 },
         { windup: 0.85, active: 0.14, recover: 0.7, reach: 170, dmg: 22, lunge: 160, unblockable: true },
@@ -79,9 +81,9 @@ const Yomi = (() => {
   /** Trechos do caminho (cenário e letreiro). */
   const ZONES = [
     { x: 0, name: 'Floresta de Kiriyama', sub: 'Era Meiji, 1877', mid: ['forest_mixed', 'bamboo_grove', 'forest_broadleaf', 'forest_bamboo_pine', 'bonsai_pine'], near: ['bush_a', 'rock_moss', 'fern', 'rock_big', 'bush_round'] },
-    { x: 2400, name: 'Aldeia abandonada', sub: 'As casas ainda cheiram a fumaça', mid: ['house_thatch2', 'house_thatch', 'store_thatch', 'shop_a', 'house_tile', 'well_a', 'barn_tile'], near: ['crate', 'barrel', 'fence', 'lantern', 'hay', 'crate_small'] },
+    { x: 2400, name: 'Aldeia abandonada', sub: 'As casas ainda cheiram a fumaça', mid: ['ss_house_long', 'ss_house_tile', 'bonsai_pine', 'ss_house_long', 'ss_house_tile'], near: ['ss_lantern', 'barrel', 'crate', 'hay', 'ss_lantern'] },
     { x: 4400, name: 'Bambuzal dos mortos', sub: 'O vento sopra entre os túmulos', mid: ['bamboo_grove', 'forest_bamboo_pine', 'bamboo_grove', 'forest_dark'], near: ['bamboo', 'rock_tall', 'grass_tall', 'lantern2'] },
-    { x: 5700, name: 'Portal do Santuário', sub: 'Onde o ceifador espera', mid: ['torii', 'forest_pines', 'mini_shrine', 'forest_dark'], near: ['lantern', 'lantern2', 'rock_flat', 'rock_moss'] },
+    { x: 5700, name: 'Portal do Santuário', sub: 'Onde o ceifador espera', mid: ['torii', 'forest_pines', 'mini_shrine', 'forest_dark', 'bonsai_pine'], near: ['ss_lantern', 'ss_lantern', 'rock_flat', 'rock_moss'] },
   ];
 
   /* ------------------------------ utilidades ------------------------------ */
@@ -98,13 +100,16 @@ const Yomi = (() => {
     }
     for (let x = -300; x < LEVEL_END + 900; x += 230 + rnd() * 200) {
       const z = zoneAt(x / 0.62);
-      mid.push({ x, name: z.mid[Math.floor(rnd() * z.mid.length)], s: 1.35 + rnd() * 0.35, dy: rnd() * 18, flip: rnd() < 0.5 });
+      const name = z.mid[Math.floor(rnd() * z.mid.length)];
+      const side = name.startsWith('ss_');
+      mid.push({ x, name, s: (side ? 0.62 : 1.35) + rnd() * (side ? 0.12 : 0.35), dy: rnd() * 18, flip: !side && rnd() < 0.5 });
     }
     for (let x = -200; x < LEVEL_END + 600; x += 160 + rnd() * 260) {
       const z = zoneAt(x);
-      near.push({ x, name: z.near[Math.floor(rnd() * z.near.length)], s: 1.25 + rnd() * 0.4, flip: rnd() < 0.5 });
+      const nn = z.near[Math.floor(rnd() * z.near.length)];
+      near.push({ x, name: nn, s: nn.startsWith('ss_') ? 0.85 + rnd() * 0.15 : 1.25 + rnd() * 0.4, flip: rnd() < 0.5 });
     }
-    for (let x = -200; x < LEVEL_END * 1.6 + 800; x += 260 + rnd() * 420) {
+    for (let x = -200; x < LEVEL_END * 1.6 + 800; x += 420 + rnd() * 600) {
       const big = rnd() < 0.14;
       fore.push({ x, name: big ? 'pine' : ['grass_tall', 'fern', 'fern2', 'grass_tall'][Math.floor(rnd() * 4)], s: big ? 5 + rnd() : 2.4 + rnd() * 1.1, big, flip: rnd() < 0.5 });
     }
@@ -167,10 +172,10 @@ const Yomi = (() => {
 
   /* ------------------------------ o rōnin ------------------------------ */
   const HERO_ATK = {
-    1: { wind: 0.07, active: 0.1, recover: 0.24, reach: 150, dmg: 1, sprites: ['hero_draw', 'hero_slash1'], lunge: 30 },
-    2: { wind: 0.06, active: 0.1, recover: 0.24, reach: 150, dmg: 1, sprites: ['hero_stance', 'hero_slash2'], lunge: 30 },
-    3: { wind: 0.12, active: 0.12, recover: 0.36, reach: 175, dmg: 2, sprites: ['hero_draw', 'hero_slash1'], lunge: 90 },
-    heavy: { wind: 0.42, active: 0.12, recover: 0.42, reach: 185, dmg: 3, sprites: ['hero_draw', 'hero_slash2'], lunge: 70, breaks: true },
+    1: { wind: 0.07, active: 0.12, recover: 0.24, reach: 150, dmg: 1, sprites: ['rs_atk0', 'rs_atk1', 'rs_atk2'], lunge: 30 },
+    2: { wind: 0.06, active: 0.12, recover: 0.24, reach: 150, dmg: 1, sprites: ['rs_atk2', 'rs_atk1', 'rs_atk0'], lunge: 30 },
+    3: { wind: 0.12, active: 0.14, recover: 0.36, reach: 175, dmg: 2, sprites: ['rs_atk0', 'rs_atk1', 'rs_atk2'], lunge: 90 },
+    heavy: { wind: 0.42, active: 0.14, recover: 0.42, reach: 185, dmg: 3, sprites: ['rs_block1', 'rs_atk1', 'rs_atk2'], lunge: 70, breaks: true, arc: true },
   };
 
   function heroStartAttack(w, kind) {
@@ -327,6 +332,7 @@ const Yomi = (() => {
         Sfx.clang(); Sfx.clang();
         w.hitstop = 0.12; w.slow = 0.5; w.shake = 8; w.punch = 0.06;
         text(w, h.x + h.face * 40, 'Aparado');
+        h.parryT = w.time;
         return;
       }
       h.st -= A.dmg * 2.2;
@@ -456,7 +462,7 @@ const Yomi = (() => {
     }
     for (const e of w.enemies) updateEnemy(w, e, dt);
     if (w.attacker && (w.attacker.state === 'dead' || !w.enemies.includes(w.attacker))) w.attacker = null;
-    w.enemies = w.enemies.filter((e) => !(e.state === 'dead' && e.deadT > 2.2));
+    w.enemies = w.enemies.filter((e) => !(e.state === 'dead' && e.deadT > (e.T.side ? 7 : 2.2))); // corpos ficam no chão
     if (w.active && w.enemies.every((e) => e.state === 'dead')) {
       w.active.done = true;
       w.active = null;
@@ -512,13 +518,17 @@ const Yomi = (() => {
 
   function heroSprite(h, w) {
     switch (h.state) {
-      case 'dead': return 'hero_stance';
-      case 'roll': return 'hero_dash';
-      case 'hurt': case 'broken': return 'hero_stance';
-      case 'block': return 'hero_stance';
-      case 'attack': return h.t < h.atk.wind ? h.atk.sprites[0] : h.atk.sprites[1];
-      case 'walk': return 'hero_sw' + (Math.floor(h.stride / 26) % 8);
-      default: return w.active ? 'hero_stance' : 'hero_idle';
+      case 'dead': return 'rs_die' + (h.deadT < 0.22 ? 0 : h.deadT < 0.55 ? 1 : h.deadT < 1.05 ? 2 : 3);
+      case 'roll': return 'rs_walk1';
+      case 'hurt': return 'rs_die0';
+      case 'broken': return 'rs_die1';
+      case 'block': return w.time - (h.parryT || -9) < 0.3 ? 'rs_block1' : 'rs_block0';
+      case 'attack': {
+        const A = h.atk;
+        return h.t < A.wind ? A.sprites[0] : h.t < A.wind + A.active + 0.05 ? A.sprites[1] : A.sprites[2];
+      }
+      case 'walk': return 'rs_walk' + (Math.floor(h.stride / 38) % 4);
+      default: return w.active ? 'rs_atk0' : 'rs_walk0';
     }
   }
 
@@ -526,12 +536,14 @@ const Yomi = (() => {
     const S = e.T.sp, A = e.atk;
     switch (e.state) {
       case 'enter': case 'approach':
-        return e.vx ? S.walk[Math.floor(e.stride / 34) % S.walk.length] : S.idle;
+        return e.vx ? S.walk[Math.floor(e.stride / (S.die ? 38 : 34)) % S.walk.length] : S.idle;
       case 'windup': return A && A.heavy && S.heavyWind ? S.heavyWind : S.wind;
       case 'strike': return A && A.heavy && S.heavyAct ? S.heavyAct : S.act;
-      case 'recover': return S.idle;
-      case 'guard': return S.wind;
-      case 'hurt': case 'stagger': case 'dead': return S.hurt;
+      case 'recover': return S.rec || S.idle;
+      case 'guard': return S.guard || S.wind;
+      case 'stagger': return S.stagger || S.hurt;
+      case 'hurt': return S.hurt;
+      case 'dead': return S.die ? S.die[e.deadT < 0.2 ? 0 : e.deadT < 0.5 ? 1 : 2] : S.hurt;
     }
     return S.idle;
   }
@@ -548,7 +560,8 @@ const Yomi = (() => {
     const gy = H * GROUND;
     const shx = (Math.random() - 0.5) * w.shake, shy = (Math.random() - 0.5) * w.shake;
     const X = (x, p = 1) => (x - w.camX * p) * k + W / 2 + shx * p;
-    const heroScale = ((H * HERO_H) / 135) * (1 + w.punch); // já em px de tela (não multiplicar por k)
+    const heroScale = ((H * HERO_H) / 135) * (1 + w.punch); // sprites antigos (3/4); já em px de tela
+    const sideScale = ((H * HERO_H) / ATLAS.rs_walk0.h) * (1 + w.punch); // sprites de perfil
 
     ctx.save();
     // céu de névoa: claro no alto, escurecendo para a mata
@@ -595,26 +608,22 @@ const Yomi = (() => {
     // camada do meio (casas, mata) com névoa leve
     drawLayer(S.mid, 0.62, gy - 42 * k, 1, 0.22);
 
-    // chão: faixa do caminho iluminada
-    const gr = ctx.createLinearGradient(0, gy - 50 * k, 0, H);
-    gr.addColorStop(0, '#5d5f58');
-    gr.addColorStop(0.25, '#9a9a92');
-    gr.addColorStop(0.55, '#6a6a63');
-    gr.addColorStop(1, '#1d1e1b');
-    ctx.fillStyle = gr;
-    ctx.fillRect(0, gy - 50 * k, W, H - gy + 50 * k);
-    // tufos de capim na beira do caminho
-    ctx.strokeStyle = 'rgba(40,42,38,0.7)';
-    ctx.lineWidth = Math.max(1, 1.4 * k);
-    ctx.beginPath();
-    for (const t of S.tufts) {
-      const tx = X(t.x);
-      if (tx < -20 || tx > W + 20) continue;
-      const ty = gy - 46 * k + t.dy * 22 * k;
-      ctx.moveTo(tx, ty);
-      ctx.lineTo(tx + (t.l - 0.5) * 8 * k, ty - t.h * k);
+    // chão: ladrilho de terra da folha de perfil (espelhado a cada repetição para esconder a emenda)
+    const G = ATLAS.ss_ground, gimg = Assets.images.ss_ground;
+    const gTop = gy - 46 * k, gBot = H * 0.94;
+    const gk = (gBot - gTop) / G.h, tw = (G.w * gk) / k;
+    ctx.fillStyle = '#2a2a28';
+    ctx.fillRect(0, gTop, W, H - gTop);
+    if (gimg) {
+      const i0 = Math.floor((w.camX - W / 2 / k) / tw) - 1, i1 = Math.ceil((w.camX + W / 2 / k) / tw) + 1;
+      for (let i = i0; i <= i1; i++) {
+        const sx = X(i * tw);
+        ctx.save();
+        if (i & 1) { ctx.translate(sx + tw * k, gTop); ctx.scale(-1, 1); } else ctx.translate(sx, gTop);
+        ctx.drawImage(gimg, 0, 0, tw * k + 1, gBot - gTop);
+        ctx.restore();
+      }
     }
-    ctx.stroke();
     // poças de "tinta" (sangue) no chão
     for (const f of w.fx) {
       if (!f.ground) continue;
@@ -640,10 +649,13 @@ const Yomi = (() => {
       if (sx < -300 || sx > W + 300) continue;
       shadow(a.x, isHero ? 46 : 46 * a.T.scale);
       const name = isHero ? heroSprite(a, w) : enemySprite(a);
-      const sc = heroScale * (isHero ? 1 : a.T.scale);
+      const side = isHero || a.T.side;
+      const sc = (side ? sideScale : heroScale) * (isHero ? 1 : a.T.scale);
       const dead = a.state === 'dead';
-      const dp = dead ? deathPose(isHero ? a.deadT : a.deadT, a.face) : null;
+      // perfil: a morte é a sequência desenhada na folha (cai e fica no chão)
+      const dp = dead && !side ? deathPose(a.deadT, a.face) : null;
       let tint = '#ffffff', ta = a.flash * 6;
+      if (!isHero && a.T.tone && ta < a.T.tone[1]) { tint = a.T.tone[0]; ta = a.T.tone[1]; }
       if (!isHero && a.state === 'windup') {
         // telégrafo: brilho que cresce; imbloqueável pisca forte
         const p = a.t / a.atk.windup;
@@ -652,12 +664,17 @@ const Yomi = (() => {
       if (!isHero && a.state === 'stagger') { tint = '#ffffff'; ta = 0.2 + 0.1 * Math.sin(w.time * 20); }
       if (isHero && a.state === 'block') { tint = '#ffffff'; ta = w.time - a.blockPress < 0.22 ? 0.45 : 0.08; }
       if (dp && dp.dark > ta) { tint = '#000000'; ta = dp.dark; }
-      const bob = !dead && (a.state === 'walk' || (a.vx && a.state !== 'block')) ? Math.abs(Math.sin((a.stride / 52) * Math.PI)) * 3 * k : 0;
+      const bob = !dead && (a.state === 'walk' || (a.vx && a.state !== 'block')) ? Math.abs(Math.sin((a.stride / 38) * Math.PI)) * 1.5 * k : 0;
+      if (a.state === 'roll') {
+        // rolamento: rastro de vultos atrás do corpo agachado
+        for (let g = 1; g <= 3; g++) Sprites.draw(ctx, name, sx - a.face * g * 26 * k, gy + 6 * k, sc, { flip: a.face < 0, alpha: 0.22 / g, sy: 0.82, rotate: a.face * 0.25 });
+      }
+      const corpseFade = dead && side ? 1 - clamp(a.deadT - (isHero ? 99 : 6), 0, 1) : null;
       Sprites.draw(ctx, name, sx, gy - bob + (a.state === 'roll' ? 6 * k : 0), sc, {
         flip: a.face < 0, tint, tintAmount: ta,
-        rotate: dp ? dp.rotate : a.state === 'roll' ? a.face * 0.15 : 0,
-        sy: dp ? dp.sy : a.state === 'broken' ? 0.94 : 1,
-        alpha: dp ? dp.alpha : isHero && a.iframes > 0 && a.state === 'roll' ? 0.75 : 1,
+        rotate: dp ? dp.rotate : a.state === 'roll' ? a.face * 0.25 : 0,
+        sy: dp ? dp.sy : a.state === 'roll' ? 0.82 : 1,
+        alpha: dp ? dp.alpha : corpseFade !== null ? corpseFade : 1,
       });
       // 危 acima de quem vai dar um golpe imbloqueável
       if (!isHero && a.state === 'windup' && a.atk.unblockable) {
@@ -695,7 +712,7 @@ const Yomi = (() => {
 
     // arco do corte do rōnin (rastro branco)
     const h = w.hero;
-    if (h.state === 'attack' && h.t >= h.atk.wind && h.t < h.atk.wind + h.atk.active + 0.06) {
+    if (h.state === 'attack' && h.atk.arc && h.t >= h.atk.wind && h.t < h.atk.wind + h.atk.active + 0.06) {
       const p = (h.t - h.atk.wind) / (h.atk.active + 0.06);
       const cx = X(h.x + h.face * 40), cy = gy - H * HERO_H * 0.5;
       const r = h.atk.reach * k * 0.75;
@@ -720,6 +737,22 @@ const Yomi = (() => {
       ctx.fillText(t.s, X(t.x), gy - 230 * k - t.t * 30 * k);
     }
 
+    // primeiro plano: muro de pedra rente à câmera (só o topo aparece acima da faixa de cinema)
+    const WL = ATLAS.ss_wall, wimg = Assets.images.ss_wall;
+    if (wimg) {
+      const wk = (H * 0.2) / WL.h, ww = WL.w * wk, top = H * 0.885;
+      const off = (w.camX * 1.25 * k) % (ww * 2);
+      for (let x = -off - ww * 2; x < W + ww; x += ww) {
+        const i = Math.round((x + off) / ww);
+        ctx.save();
+        if (i & 1) { ctx.translate(x + ww, top); ctx.scale(-1, 1); } else ctx.translate(x, top);
+        ctx.globalAlpha = 1;
+        ctx.drawImage(wimg, 0, 0, ww + 1, WL.h * wk);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; // na sombra, mais escuro que o caminho
+        ctx.fillRect(0, 0, ww + 1, WL.h * wk);
+        ctx.restore();
+      }
+    }
     // primeiro plano: silhuetas escuras e desfocadas passando rente à câmera
     for (const o of S.fore) {
       const sx = X(o.x, 1.6);

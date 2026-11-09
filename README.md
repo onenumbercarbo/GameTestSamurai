@@ -90,6 +90,8 @@ Kiriyama ─ Estrada do Leste ─ Hanamura ─ Trilha dos Bambus ─ Sagino ─ 
 
 Um modo à parte, na tela de título (botão **Caminho do Rōnin** ou tecla `R`): um duelo linear em 2.5D, visto de lado, em preto e branco de película (`js/yomi.js`).
 
+O rōnin e os ninjas usam a folha de perfil (andar, atacar, defender, morrer: `rs_*` e `ns_*`); a aldeia, o chão de terra, o muro de pedra e as lanternas vêm da mesma folha (`ss_*`). Jūrō e Gendō ainda usam as poses do modo isométrico.
+
 - **Cena**: camadas em paralaxe (mata distante na névoa, casas e mata no meio, o caminho, silhuetas escuras rente à câmera), feixes de luz, granulado, riscos de filme e faixas de cinema.
 - **Combate de postura**: corte leve (combo de 3), golpe pesado (quebra a guarda), defender e rolar.
   - Defender bem na hora do golpe **apara**: o inimigo perde o equilíbrio e o próximo corte é uma execução.
@@ -150,4 +152,4 @@ js/ui.js / main.js         HUD, telas, cutscenes, diretor de câmera e game loop
 python3 tools/extract_sprites.py folha_boss.jpg folha_heroi.jpg folha_floresta.jpg folha_acampamento.jpg folha_minichefes.jpg costas_oni_ronin.jpg costas_kunoichi.jpg costas_aldeoes.jpg floresta2.jpg
 ```
 
-Requer Pillow, NumPy e SciPy (a SciPy remove o chão pintado sob as árvores). Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.
+Requer Pillow, NumPy e SciPy (a SciPy remove o chão pintado sob as árvores). A 14ª folha (opcional) é a de perfil do modo Caminho do Rōnin, recortada por `side_sheet()` a partir de `SIDE_FRAMES`. Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.

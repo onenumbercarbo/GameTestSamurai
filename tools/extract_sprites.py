@@ -616,7 +616,7 @@ def walk_frame(img, k):
         cols = slice(0, cx) if side == 0 else slice(cx, w)
         seg = a[hip:, cols]
         L = h - hip
-        newL = int(round(L - lift * h * 0.11))
+        newL = int(round(L - lift * h * 0.15))
         if newL >= L:
             continue
         part = Image.fromarray(seg).resize((seg.shape[1], newL), Image.LANCZOS)
@@ -624,6 +624,52 @@ def walk_frame(img, k):
         blk[:newL] = np.asarray(part)
         out[hip:, cols] = blk
     return Image.fromarray(out, 'RGBA')
+
+
+import math
+
+
+def _sample_row(row, cx, s):
+    """reamostra uma linha RGBA comprimindo/esticando em torno de cx (fator s)."""
+    w = row.shape[0]
+    xs = cx + (np.arange(w) - cx) / s
+    x0 = np.floor(xs).astype(int); fr = (xs - x0)[:, None]
+    ok = (x0 >= 0) & (x0 + 1 < w)
+    x0c = np.clip(x0, 0, w - 2)
+    out = row[x0c] * (1 - fr) + row[x0c + 1] * fr
+    out[~ok] = 0
+    return out
+
+def stride_frame(img, k, hip_frac=0.6, close=0.45, lift=0.08, swing=0.0):
+    """Quadro k (0..7) de passada: as pernas (abaixo do quadril) abrem e fecham como
+    tesoura duas vezes por ciclo (contato em 0/4, passagem em 2/6) e a perna que
+    passa sobe um pouco."""
+    a = np.asarray(img.convert('RGBA')).astype(np.float32)
+    h, w = a.shape[:2]
+    ys, xs = np.nonzero(a[..., 3] > 40)
+    low = ys > h * 0.85
+    cx = (xs[low].min() + xs[low].max()) / 2
+    hip = int(h * hip_frac)
+    L = h - hip
+    ph = k / 8 * 2 * math.pi
+    f = 1 - close * (1 - abs(math.cos(ph)))  # 1 no contato, 1-close na passagem
+    out = a.copy()
+    for y in range(hip, h):
+        t = (y - hip) / L
+        s = 1 - (1 - f) * t
+        out[y] = _sample_row(a[y], cx + swing * math.sin(ph) * t * w, s)
+    # perna que passa sobe (metade esquerda e direita alternam)
+    up = abs(math.sin(ph))
+    side = 0 if math.sin(ph) > 0 else 1
+    ic = int(round(cx))
+    cols = slice(0, ic) if side == 0 else slice(ic, w)
+    newL = int(round(L - up * lift * h))
+    if newL < L:
+        seg = out[hip:, cols].clip(0, 255).astype(np.uint8)
+        part = np.asarray(Image.fromarray(seg).resize((seg.shape[1], newL), Image.LANCZOS)).astype(np.float32)
+        blk = np.zeros_like(seg, dtype=np.float32); blk[:newL] = part
+        out[hip:, cols] = blk
+    return Image.fromarray(out.clip(0, 255).astype(np.uint8), 'RGBA')
 
 
 def main(*paths):
@@ -662,8 +708,15 @@ def main(*paths):
     # frente, levantando alternadamente a perna esquerda e a direita.
     front = Image.open(os.path.join(OUT, 'hero_front.png'))
     for k in range(8):
-        walk_frame(front, k).save(os.path.join(OUT, f'hero_fw{k}.png'), optimize=True)
+        f = stride_frame(walk_frame(front, k), k, hip_frac=0.62, close=0.22, lift=0.0)
+        f.save(os.path.join(OUT, f'hero_fw{k}.png'), optimize=True)
         atlas[f'hero_fw{k}'] = dict(atlas['hero_front'])
+    # Caminhada de PERFIL: na folha a hakama fica quase sempre aberta (as pernas
+    # parecem paradas). Reforça a passada: as pernas fecham na passagem (quadros
+    # 2 e 6), abrem no contato (0 e 4) e a perna que passa sobe.
+    for k in range(8):
+        p = os.path.join(OUT, f'hero_sw{k}.png')
+        stride_frame(Image.open(p), k).save(p, optimize=True)
     with open(os.path.join(ROOT, 'js', 'atlas.js'), 'w') as f:
         f.write('/* Gerado por tools/extract_sprites.py — não editar à mão.\n'
                 ' * w/h: tamanho do PNG; ax/ay: ponto de apoio (pés) em pixels do PNG. */\n')

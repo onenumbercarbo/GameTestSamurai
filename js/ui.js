@@ -224,6 +224,7 @@ const UI = {
     const by = top + 170 * s;
     const buttons = [{ id: 'new', label: 'Novo jogo', primary: true }];
     if (save > 0) buttons.push({ id: 'continue', label: `Continuar: ${STAGES[save].name}` });
+    buttons.push({ id: 'yomi', label: 'Caminho do Rōnin (P&B)' });
     if (TOUCH.active && document.fullscreenEnabled) buttons.push({ id: 'fullscreen', label: 'Tela cheia' });
     const horizontal = cam.viewH < 520;
     this.titleButtons = buttons.map((b, i) => {
@@ -238,7 +239,7 @@ const UI = {
       ? ['Joystick: arraste o polegar na metade esquerda da tela', 'CORTE (segure para combo) · DASH (esquiva) · AGIR (baús e reféns) · IAI (com o pergaminho)']
       : ['WASD / setas — mover      Mouse — mirar      Clique — corte (3 cliques = combo)',
         'Espaço / Shift — dash      Dash + clique — investida      Botão direito — iaijutsu (item)      E — baús e reféns',
-        'Enter — novo jogo      C — continuar      Esc / P — pausa e tesouros      M — som'];
+        'Enter — novo jogo      C — continuar      R — Caminho do Rōnin (duelo 2.5D em preto e branco)      M — som'];
     ctx.font = `500 ${Math.round(clamp(13 * s, 10, 13))}px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.6)';
     const ly = Math.max(this.titleButtons[this.titleButtons.length - 1].y + bh + 28, cam.viewH * 0.8);

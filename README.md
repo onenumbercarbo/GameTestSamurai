@@ -86,6 +86,27 @@ Kiriyama ─ Estrada do Leste ─ Hanamura ─ Trilha dos Bambus ─ Sagino ─ 
 - Moradores andam pelas vilas, conversam sozinhos e reagem ao perigo: acuados enquanto a vila está ocupada, alegres depois.
 - O progresso (vilas libertadas, tesouros e a semente do mundo) fica salvo. Ao morrer ou continuar, o rōnin volta para a vila em que estava, no mesmo mundo; um jogo novo sorteia outro mundo.
 
+## Caminho do Rōnin (modo P&B)
+
+Um modo à parte, na tela de título (botão **Caminho do Rōnin** ou tecla `R`): um duelo linear em 2.5D, visto de lado, em preto e branco de película (`js/yomi.js`).
+
+- **Cena**: camadas em paralaxe (mata distante na névoa, casas e mata no meio, o caminho, silhuetas escuras rente à câmera), feixes de luz, granulado, riscos de filme e faixas de cinema.
+- **Combate de postura**: corte leve (combo de 3), golpe pesado (quebra a guarda), defender e rolar.
+  - Defender bem na hora do golpe **apara**: o inimigo perde o equilíbrio e o próximo corte é uma execução.
+  - Golpes marcados com 危 não podem ser bloqueados, só esquivados rolando.
+  - Os inimigos atacam um de cada vez e vêm pelos dois lados.
+- **Percurso**: Floresta de Kiriyama → Aldeia abandonada (duelo com Jūrō) → Bambuzal dos mortos → Portal do Santuário (Gendō).
+- **Morte**: você volta ao último trecho vencido.
+
+| Ação | Teclado / mouse | Toque |
+|---|---|---|
+| Andar | `A` `D` / setas | arrastar na esquerda |
+| Corte | `J` / clique | 斬 |
+| Golpe pesado | `L` / botão direito | 重 |
+| Defender / aparar | segurar `K` ou `Shift` | 守 |
+| Rolar | `Espaço` | 転 |
+| Sair | `Esc` | ✕ |
+
 ## Câmera cinematográfica
 
 A câmera é dirigida por planos pré-definidos (`directCamera` em `js/main.js`):

@@ -1046,6 +1046,15 @@ class Cutscene {
     game.state = 'transition';
   }
 
+  function startYomi(checkpoint) {
+    game.state = 'transition';
+    fadeTo(() => {
+      game.yomi = Yomi.create(checkpoint);
+      game.state = 'yomi';
+      game.t = 0;
+    });
+  }
+
   function backToTitle() {
     game.state = 'transition';
     fadeTo(() => {
@@ -1103,7 +1112,10 @@ class Cutscene {
 
     if (input.wasPressed('F3')) game.debug = !game.debug;
     // Em jogo os toques viram joystick/botões; em menus e cutscenes, "confirmar".
-    input.mode = game.state === 'play' && !(game.world && (game.world.cutscene || game.world.dialog)) ? 'play' : 'menu';
+    input.mode = (game.state === 'play' && !(game.world && (game.world.cutscene || game.world.dialog))) || (game.state === 'yomi' && game.yomi && game.yomi.hero.state !== 'dead' && !game.yomi.won) ? 'play' : 'menu';
+    // Preto e branco de película no modo Caminho do Rōnin (filtro do próprio canvas: barato e funciona em todo navegador).
+    const filt = game.state === 'yomi' ? 'grayscale(1) contrast(1.2) brightness(0.97)' : '';
+    if (canvas.style.filter !== filt) canvas.style.filter = filt;
     input.updateTouch(realDt);
     const portrait = TOUCH.active && camera.viewH > camera.viewW * 1.05;
     if (input.wasPressed('KeyM')) Sfx.toggleMute();
@@ -1132,6 +1144,7 @@ class Cutscene {
         UI.title(ctx, camera, game.t, game.save.started ? game.save.progress : 0);
         const hit = (id) => UI.titleButtons.find((b) => b.id === id && input.tapIn(b));
         if (hit('fullscreen')) { input.flush(); goFullscreen(); }
+        else if (input.wasPressed('KeyR') || hit('yomi')) { input.flush(); startYomi(0); }
         else if ((input.wasPressed('KeyC') || hit('continue')) && game.save.started) { input.flush(); newGame(game.save); }
         else if (input.wasPressed('Enter', 'NumpadEnter', 'Space') || hit('new')) { input.flush(); newGame(null); }
         else if (input.clicked) input.flush();
@@ -1182,6 +1195,20 @@ class Cutscene {
         input.buttons = TOUCH.active && !w.cutscene && !w.dialog ? UI.touchLayout(w) : [];
         if (!w.dialog) UI.touchControls(ctx, w, input);
         UI.dialog(ctx, w);
+        break;
+      }
+
+      case 'yomi': {
+        // Modo "Caminho do Rōnin": duelo lateral 2.5D em preto e branco.
+        const Y = game.yomi;
+        if (!portrait) Yomi.update(Y, realDt, input);
+        Yomi.render(ctx, camera, Y);
+        Yomi.overlay(ctx, camera, Y);
+        input.buttons = TOUCH.active && Y.hero.state !== 'dead' && !Y.won ? Yomi.touchLayout(camera) : [];
+        if (input.buttons.length) Yomi.drawTouch(ctx, camera, input.buttons, input);
+        if (input.wasPressed('Escape')) { input.flush(); backToTitle(); }
+        else if (Y.hero.state === 'dead' && Y.over > 2 && input.consumeConfirm()) startYomi(Y.checkpoint);
+        else if (Y.won > 3 && input.consumeConfirm()) backToTitle();
         break;
       }
 

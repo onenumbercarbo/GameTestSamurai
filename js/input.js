@@ -132,6 +132,7 @@ class Input {
     else if (id === 'heavy') this.heavyPresses++;
     else if (id === 'act') this.pressed.add('KeyE');
     else if (id === 'pause') this.pressed.add('Escape');
+    else if (id === 'block') this.pressed.add('YomiBlock'); // modo Yomi: defender (segurar)
   }
 
   /** Segurar CORTE repete o golpe (combo contínuo sem precisar martelar a tela). */

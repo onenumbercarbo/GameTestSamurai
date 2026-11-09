@@ -745,6 +745,14 @@ class Cutscene {
     // Arena travada: o jogador não sai do círculo enquanto houver luta.
     const lock = w.activeArena ? { c: w.activeArena.center, r: w.activeArena.r } : w.bossFight && w.fightBoss ? { c: w.fightBoss.data.center, r: w.fightBoss.data.arenaR } : null;
     if (lock) {
+      // Sem parede invisível: o círculo cresce até incluir o inimigo vivo mais
+      // distante (empurrado pelo golpe, ou atirador que mantém distância), para o
+      // rōnin sempre poder ir até ele em vez de esperar que ele volte.
+      const foes = w.activeArena ? w.activeArena.enc.members : [w.fightBoss];
+      for (const e of foes) {
+        if (!e || !e.alive) continue;
+        lock.r = Math.max(lock.r, Math.hypot(e.x - lock.c[0], e.y - lock.c[1]) + 1.5);
+      }
       const dx = p.x - lock.c[0], dy = p.y - lock.c[1];
       const d = Math.hypot(dx, dy);
       if (d > lock.r) {

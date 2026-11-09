@@ -97,10 +97,10 @@ const Yomi = (() => {
     seed = 77;
     const far = [], mid = [], near = [], fore = [], tufts = [];
     let lastPlate = -9999;
-    for (let x = -3200; x < LEVEL_END + 3200; x += 240 + rnd() * 200) {
-      far.push({ x, name: ['forest_dark', 'forest_pines', 'pine', 'forest_mixed'][Math.floor(rnd() * 4)], s: 1.9 + rnd() * 0.6, dy: rnd() * 30 });
+    for (let x = -3200; x < LEVEL_END + 3200; x += (rnd() < 0.35 ? 900 : 260) + rnd() * 300) { // tufos de mata com clareiras
+      far.push({ x, name: ['forest_broadleaf', 'forest_pines', 'pine', 'forest_mixed'][Math.floor(rnd() * 4)], s: 1.9 + rnd() * 0.6, dy: rnd() * 30 });
     }
-    for (let x = -3200; x < LEVEL_END + 3200; x += 230 + rnd() * 200) {
+    for (let x = -3200; x < LEVEL_END + 3200; x += (rnd() < 0.4 ? 1100 : 380) + rnd() * 300) {
       const z = zoneAt(x / 0.62);
       let name = z.mid[Math.floor(rnd() * z.mid.length)];
       if (name.startsWith('ss_') && x - lastPlate < 1500) name = ['forest_mixed', 'forest_broadleaf', 'forest_pines', 'bamboo_grove'][Math.floor(rnd() * 4)];
@@ -121,7 +121,7 @@ const Yomi = (() => {
     }
     for (let x = -300; x < LEVEL_END + 600; x += 18 + rnd() * 40) tufts.push({ x, dy: rnd(), h: 6 + rnd() * 10, l: rnd() });
     const beams = [];
-    for (let x = -2400; x < LEVEL_END * 0.3 + 2400; x += 220 + rnd() * 260) beams.push({ x, w: 30 + rnd() * 90, a: 0.05 + rnd() * 0.08, ph: rnd() * 6 });
+    for (let x = -2400; x < LEVEL_END * 0.3 + 2400; x += 220 + rnd() * 260) beams.push({ x, w: 50 + rnd() * 110, a: 0.07 + rnd() * 0.09, ph: rnd() * 6 });
     return { far, mid, near, fore, tufts, beams };
   }
 
@@ -154,7 +154,7 @@ const Yomi = (() => {
     const T = TYPES[type];
     const h = w.hero;
     w.enemies.push({
-      type, T, x: h.x + side * ((w.viewHalf || 900) + 120 + Math.random() * 100), face: -side, hp: T.hp, maxHp: T.hp,
+      type, T, x: h.x + side * ((w.viewHalf || 900) + 40 + Math.random() * 60), face: -side, hp: T.hp, maxHp: T.hp,
       state: 'enter', t: -delay, atk: null, chain: 0, flash: 0, deadT: 0, stride: 0, vx: 0,
       cool: 0.6 + Math.random() * 0.8, guardT: 0, dangerT: 0,
     });
@@ -204,8 +204,9 @@ const Yomi = (() => {
     if (c.blockPress) h.blockPress = w.time;
     if (h.state === 'dead') { h.deadT += dt; return; }
 
-    const locked = w.active;
-    const minX = locked ? locked.x - 620 : -100, maxX = locked ? locked.x + 620 : LEVEL_END + 200;
+    // Sem parede invisível: o rōnin anda livre até o fim do caminho e pode ir de
+    // encontro aos inimigos (eles surgem logo fora do quadro e vêm até ele).
+    const minX = -100, maxX = LEVEL_END + 400;
     const move = (dx) => { h.x = clamp(h.x + dx, minX, maxX); };
 
     switch (h.state) {
@@ -276,7 +277,7 @@ const Yomi = (() => {
     const h = w.hero;
     let any = false;
     for (const e of w.enemies) {
-      if (e.state === 'dead' || e.state === 'enter') continue;
+      if (e.state === 'dead' || (e.state === 'enter' && e.t < 0)) continue; // quem está chegando também pode ser atingido
       const d = (e.x - h.x) * h.face;
       if (d < -20 || d > A.reach + e.T.gap * 0.25) continue;
       any = true;
@@ -380,7 +381,7 @@ const Yomi = (() => {
         if (e.t < 0) return;
         e.face = Math.sign(dist) || 1;
         walk(e.face, T.speed * 1.3);
-        if (ad < 700) { e.state = 'approach'; e.t = 0; }
+        if (ad < (w.viewHalf || 900) * 0.8) { e.state = 'approach'; e.t = 0; }
         break;
       case 'approach': {
         e.face = Math.sign(dist) || e.face;
@@ -508,6 +509,138 @@ const Yomi = (() => {
   /* -------------------------------- desenho -------------------------------- */
   let grain = null;
   let farCache = null;   // mata distante pré-desenhada
+  let backdrop = null;   // panorama de montanhas (gerado uma vez)
+
+  /**
+   * Panorama do Japão antigo em camadas de névoa (cinza claro no fundo, mais escuro
+   * à frente): sol pálido, cordilheira com o vulcão nevado, colinas com pinheiros,
+   * um pagode de cinco andares, um castelo no morro, torii e telhados de templo.
+   * As cristas usam senos de frequência inteira: o panorama repete sem emenda.
+   */
+  function makeBackdrop() {
+    const PW = 4096, PH = 420;
+    const c = document.createElement('canvas');
+    c.width = PW; c.height = PH;
+    const g = c.getContext('2d');
+    const TAU = Math.PI * 2;
+    const ridge = (x, base, amp, fs) => base - amp * fs.reduce((sum, [f, a, ph]) => sum + a * Math.sin((x / PW) * TAU * f + ph), 0);
+    const fill = (fn, color) => {
+      g.fillStyle = color;
+      g.beginPath();
+      g.moveTo(0, PH);
+      for (let x = 0; x <= PW; x += 8) g.lineTo(x, fn(x));
+      g.lineTo(PW, PH);
+      g.closePath();
+      g.fill();
+    };
+    const mist = (y0, y1, a) => {
+      const gr = g.createLinearGradient(0, y0, 0, y1);
+      gr.addColorStop(0, 'rgba(225,226,220,0)');
+      gr.addColorStop(1, `rgba(225,226,220,${a})`);
+      g.fillStyle = gr;
+      g.fillRect(0, y0, PW, y1 - y0);
+    };
+    // sol pálido com halo
+    const sun = g.createRadialGradient(720, 110, 0, 720, 110, 190);
+    sun.addColorStop(0, 'rgba(255,255,250,0.95)');
+    sun.addColorStop(0.3, 'rgba(255,255,250,0.55)');
+    sun.addColorStop(1, 'rgba(255,255,250,0)');
+    g.fillStyle = sun;
+    g.fillRect(500, -100, 440, 420);
+    // pássaros
+    g.strokeStyle = 'rgba(70,72,68,0.6)';
+    g.lineWidth = 2;
+    for (const [bx, by, bs] of [[1500, 70, 9], [1530, 82, 7], [1556, 66, 6], [3000, 100, 8], [3024, 110, 6]]) {
+      g.beginPath(); g.moveTo(bx - bs, by - bs * 0.4); g.quadraticCurveTo(bx - bs * 0.4, by - bs * 0.6, bx, by);
+      g.quadraticCurveTo(bx + bs * 0.4, by - bs * 0.6, bx + bs, by - bs * 0.4); g.stroke();
+    }
+    // 1) cordilheira distante com o vulcão nevado (cone suave)
+    const FX = 1250, FW = 620, FTOP = 52;
+    const fuji = (x) => {
+      const d = Math.abs(x - FX) / FW;
+      return d >= 1 ? PH : FTOP + (300 - FTOP) * Math.pow(d, 1.35) + (d < 0.07 ? 6 : 0);
+    };
+    const far = (x) => Math.min(fuji(x), ridge(x, 270, 1, [[3, 26, 0.4], [7, 14, 1.3], [13, 6, 2.1]]));
+    fill(far, '#c3c5bf');
+    // neve no topo, com borda recortada
+    g.save();
+    g.beginPath();
+    g.moveTo(FX - FW, PH);
+    for (let x = FX - FW; x <= FX + FW; x += 4) g.lineTo(x, fuji(x));
+    g.lineTo(FX + FW, PH);
+    g.closePath();
+    g.clip();
+    g.fillStyle = '#f1f1ec';
+    g.beginPath();
+    g.moveTo(FX - 300, 0);
+    g.lineTo(FX + 300, 0);
+    for (let x = FX + 300; x >= FX - 300; x -= 12) g.lineTo(x, 130 + 16 * Math.sin(x * 0.09) + 10 * Math.sin(x * 0.23));
+    g.closePath();
+    g.fill();
+    g.restore();
+    mist(170, 320, 0.75);
+    // 2) colinas médias com pinheiros, pagode e castelo
+    const mid = (x) => ridge(x, 318, 1, [[2, 22, 2.2], [5, 16, 0.3], [11, 7, 1.7]]);
+    fill(mid, '#a3a69f');
+    g.fillStyle = '#a3a69f';
+    for (let x = 0; x < PW; x += 23 + ((x * 7) % 19)) { // pinheiros na crista
+      const y = mid(x), h = 16 + ((x * 13) % 14);
+      g.beginPath(); g.moveTo(x - 6, y + 2); g.lineTo(x, y - h); g.lineTo(x + 6, y + 2); g.fill();
+    }
+    const pagoda = (px, base, s) => { // pagode de cinco andares
+      g.fillStyle = '#8e918a';
+      g.fillRect(px - 2 * s, base - 150 * s, 4 * s, 30 * s); // ponta (sōrin)
+      for (let i = 0; i < 5; i++) {
+        const y = base - i * 24 * s, w2 = (46 - i * 6) * s;
+        g.fillRect(px - w2 * 0.55, y - 16 * s, w2 * 1.1, 16 * s);
+        g.beginPath(); // beiral curvo
+        g.moveTo(px - w2 - 8 * s, y - 14 * s);
+        g.quadraticCurveTo(px, y - 26 * s, px + w2 + 8 * s, y - 14 * s);
+        g.lineTo(px + w2 * 0.8, y - 18 * s);
+        g.lineTo(px - w2 * 0.8, y - 18 * s);
+        g.closePath(); g.fill();
+      }
+    };
+    pagoda(2480, mid(2480) + 4, 0.95);
+    const castle = (px, base, s) => { // castelo no morro: muralha de pedra e telhados em camadas
+      g.fillStyle = '#8e918a';
+      g.beginPath(); g.moveTo(px - 70 * s, base); g.lineTo(px - 55 * s, base - 30 * s); g.lineTo(px + 55 * s, base - 30 * s); g.lineTo(px + 70 * s, base); g.fill();
+      const tiers = [[56, 26], [44, 24], [32, 22], [22, 20]];
+      let y = base - 30 * s;
+      for (const [hw, hh] of tiers) {
+        g.fillRect(px - hw * 0.8 * s, y - hh * s, hw * 1.6 * s, hh * s);
+        g.beginPath();
+        g.moveTo(px - (hw + 12) * s, y - hh * 0.75 * s);
+        g.quadraticCurveTo(px, y - (hh + 16) * s, px + (hw + 12) * s, y - hh * 0.75 * s);
+        g.closePath(); g.fill();
+        y -= hh * s;
+      }
+    };
+    castle(3420, mid(3420) + 6, 1);
+    mist(260, 380, 0.6);
+    // 3) morros próximos com torii e telhado de templo
+    const near = (x) => ridge(x, 372, 1, [[3, 14, 1.1], [8, 9, 2.6], [17, 4, 0.2]]);
+    fill(near, '#83867f');
+    g.fillStyle = '#83867f';
+    for (let x = 0; x < PW; x += 40 + ((x * 11) % 33)) { // copas arredondadas
+      const y = near(x);
+      g.beginPath(); g.arc(x, y + 4, 14 + ((x * 3) % 10), Math.PI, 0); g.fill();
+    }
+    const torii = (px, base) => {
+      g.fillStyle = '#6f726b';
+      g.fillRect(px - 26, base - 54, 5, 54); g.fillRect(px + 21, base - 54, 5, 54);
+      g.fillRect(px - 32, base - 44, 64, 4);
+      g.beginPath(); g.moveTo(px - 40, base - 56); g.quadraticCurveTo(px, base - 50, px + 40, base - 56); g.lineTo(px + 36, base - 62); g.quadraticCurveTo(px, base - 57, px - 36, base - 62); g.closePath(); g.fill();
+    };
+    torii(560, near(560) + 6);
+    torii(3900, near(3900) + 6);
+    g.fillStyle = '#74776f'; // telhado de templo
+    const tx = 1900, ty = near(1900) + 4;
+    g.fillRect(tx - 40, ty - 26, 80, 26);
+    g.beginPath(); g.moveTo(tx - 70, ty - 22); g.quadraticCurveTo(tx, ty - 70, tx + 70, ty - 22); g.closePath(); g.fill();
+    mist(330, PH, 0.5);
+    return c;
+  }
   let groundPair = null; // textura da clareira (gerada uma vez)
 
   /**
@@ -618,6 +751,14 @@ const Yomi = (() => {
     ctx.fillRect(0, 0, W, H);
 
     const S = w.scenery;
+    // paisagem japonesa ao fundo (quase parada: paralaxe 0,05), repetida sem emenda
+    if (!backdrop) backdrop = makeBackdrop();
+    {
+      const top = H * 0.06, bh = H * GROUND - H * 0.11 - top + 8 * k;
+      const sc = bh / backdrop.height, tw = backdrop.width * sc;
+      const off = ((((w.camX * k * 0.05) % tw) + tw) % tw);
+      for (let x = -off; x < W; x += tw) ctx.drawImage(backdrop, x, top, tw + 1, bh);
+    }
     const drawLayer = (list, p, baseY, scaleK, fog, tone = null, cached = false) => {
       for (const o of list) {
         const sx = cached ? (o.x - w.camX * p) * k + W / 2 : X(o.x, p);
@@ -656,7 +797,7 @@ const Yomi = (() => {
       const saved = ctx;
       ctx = fctx; // drawLayer desenha no contexto atual
       fctx.translate(M, 0);
-      drawLayer(S.far, 0.3, gTop - 6 * k, 2.1, 0.35, '#8a8d86', true);
+      drawLayer(S.far, 0.3, gTop + 10 * k, 1.05, 0, '#9a9d96', true);
       fctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx = saved;
     }
@@ -671,17 +812,23 @@ const Yomi = (() => {
       g.addColorStop(0, `rgba(255,255,250,${a})`);
       g.addColorStop(1, 'rgba(255,255,250,0)');
       ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(bx, 0);
-      ctx.lineTo(bx + b.w * k, 0);
-      ctx.lineTo(bx + b.w * k + 260 * k, gy + 40 * k);
-      ctx.lineTo(bx + 200 * k, gy + 40 * k);
-      ctx.closePath();
-      ctx.fill();
+      // borda suave: faixas cada vez mais estreitas empilhadas (o miolo fica mais claro)
+      ctx.globalAlpha = 0.4;
+      for (const f of [1, 0.7, 0.45, 0.22]) {
+        const inset = (b.w * k * (1 - f)) / 2;
+        ctx.beginPath();
+        ctx.moveTo(bx + inset, 0);
+        ctx.lineTo(bx + b.w * k - inset, 0);
+        ctx.lineTo(bx + b.w * k + 260 * k - inset * 1.6, gy + 40 * k);
+        ctx.lineTo(bx + 200 * k + inset * 1.6, gy + 40 * k);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.globalCompositeOperation = 'source-over';
     // camada do meio (casas, mata) com névoa leve
-    drawLayer(S.mid, 0.62, gTop + 14 * k, 1.55, 0.18, '#4b4e48');
+    drawLayer(S.mid, 0.62, gTop + 14 * k, 1.2, 0.12, '#55584f');
 
     // chão: a clareira em perspectiva. O ladrilho de terra (espelhado aos pares) é
     // desenhado em faixas horizontais; cada faixa anda com a sua paralaxe — devagar
@@ -965,11 +1112,11 @@ const Yomi = (() => {
   function touchLayout(cam) {
     const W = cam.viewW, H = cam.viewH, r = Math.min(46, H * 0.075);
     return [
-      { id: 'attack', label: '斬', x: W - r * 1.6, y: H - r * 2.4, r: r * 1.15 },
-      { id: 'heavy', label: '重', x: W - r * 4.2, y: H - r * 1.7, r },
-      { id: 'block', label: '守', x: W - r * 1.7, y: H - r * 5.0, r },
-      { id: 'dash', label: '転', x: W - r * 4.4, y: H - r * 4.3, r: r * 0.85 },
-      { id: 'pause', label: '✕', x: W - 30, y: 30, r: 20 }, // sai para o título
+      { id: 'attack', label: 'Cortar', x: W - r * 1.6, y: H - r * 2.4, r: r * 1.15 },
+      { id: 'heavy', label: 'Golpe forte', x: W - r * 4.2, y: H - r * 1.7, r },
+      { id: 'block', label: 'Defender', x: W - r * 1.7, y: H - r * 5.0, r },
+      { id: 'dash', label: 'Rolar', x: W - r * 4.4, y: H - r * 4.3, r: r * 0.95 },
+      { id: 'pause', label: 'Sair', x: W - 34, y: 34, r: 24 }, // sai para o título
     ];
   }
 
@@ -987,8 +1134,11 @@ const Yomi = (() => {
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = `700 ${Math.round(b.r * 0.8)}px ${FONT_TITLE}`;
-      ctx.fillText(b.label, b.x, b.y + 1);
+      // rótulo em português; palavras longas quebram em duas linhas
+      const words = b.label.split(' ');
+      const fs = Math.round(b.r * (words.length > 1 ? 0.32 : b.label.length > 6 ? 0.3 : 0.36));
+      ctx.font = `700 ${fs}px ${FONT_UI}`;
+      words.forEach((wd, i) => ctx.fillText(wd, b.x, b.y + 1 + (i - (words.length - 1) / 2) * fs * 1.1));
     }
     const st = input.stick;
     if (st.id !== null) {

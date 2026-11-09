@@ -65,7 +65,7 @@ const UI = {
     const dashReady = p.dashCooldown <= 0;
     ctx.fillStyle = dashReady ? '#f3e9d8' : 'rgba(243,233,216,0.3)';
     ctx.font = `600 11px ${FONT_UI}`;
-    ctx.fillText(dashReady ? 'DASH ●' : 'DASH ○', 20, top + 48);
+    ctx.fillText(dashReady ? 'ESQUIVA ●' : 'ESQUIVA ○', 20, top + 48);
     if (p.mods.iai) {
       ctx.fillStyle = p.heavyCd <= 0 ? '#a9d4ff' : 'rgba(169,212,255,0.3)';
       ctx.fillText(p.heavyCd <= 0 ? 'IAI ●' : 'IAI ○', 80, top + 48);
@@ -236,7 +236,7 @@ const UI = {
     });
 
     const lines = TOUCH.active
-      ? ['Joystick: arraste o polegar na metade esquerda da tela', 'CORTE (segure para combo) · DASH (esquiva) · AGIR (baús e reféns) · IAI (com o pergaminho)']
+      ? ['Joystick: arraste o polegar na metade esquerda da tela', 'CORTAR (segure para combo) · ESQUIVAR · AGIR (baús e reféns) · GOLPE FORTE (com o pergaminho)']
       : ['WASD / setas — mover      Mouse — mirar      Clique — corte (3 cliques = combo)',
         'Espaço / Shift — dash      Dash + clique — investida      Botão direito — iaijutsu (item)      E — baús e reféns',
         'Enter — novo jogo      C — continuar      R — Caminho do Rōnin (duelo 2.5D em preto e branco)      M — som'];
@@ -274,14 +274,14 @@ const UI = {
     const s = clamp(Math.min(cam.viewW, cam.viewH) / 400, 0.8, 1.35);
     const R = cam.viewW - 24 * s, B = cam.viewH - 22 * s - lb;
     const b = [
-      { id: 'attack', x: R - 48 * s, y: B - 50 * s, r: 46 * s, label: '斬', sub: 'CORTE' },
-      { id: 'dash', x: R - 150 * s, y: B - 26 * s, r: 34 * s, label: '»', sub: 'DASH' },
-      { id: 'pause', x: cam.viewW - 30 * s, y: 30 * s + lb, r: 20 * s, label: 'II' },
+      { id: 'attack', x: R - 48 * s, y: B - 50 * s, r: 46 * s, label: '斬', text: 'Cortar' },
+      { id: 'dash', x: R - 150 * s, y: B - 26 * s, r: 34 * s, label: '»', text: 'Esquivar' },
+      { id: 'pause', x: cam.viewW - 34 * s, y: 34 * s + lb, r: 26 * s, label: 'II', text: 'Pausa' },
     ];
     const p = w.player;
-    if (p.mods.iai) b.push({ id: 'heavy', x: R - 70 * s, y: B - 150 * s, r: 32 * s, label: '居', sub: 'IAI', off: p.heavyCd > 0 });
+    if (p.mods.iai) b.push({ id: 'heavy', x: R - 70 * s, y: B - 150 * s, r: 32 * s, label: '居', text: 'Golpe forte', off: p.heavyCd > 0 });
     const near = (w.chests || []).some((c) => !c.opened && c.near()) || (w.villagers || []).some((v) => !v.freed && v.near());
-    if (near) b.push({ id: 'act', x: R - 165 * s, y: B - 120 * s, r: 32 * s, label: '手', sub: 'AGIR', glow: true });
+    if (near) b.push({ id: 'act', x: R - 165 * s, y: B - 120 * s, r: 32 * s, label: '手', text: 'Agir', glow: true });
     return b;
   },
 
@@ -321,12 +321,11 @@ const UI = {
       ctx.fillStyle = '#f3e9d8';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `700 ${Math.round(b.r * (b.sub ? 0.75 : 0.6))}px ${b.id === 'dash' || b.id === 'pause' ? FONT_UI : FONT_TITLE}`;
-      ctx.fillText(b.label, b.x, b.y - (b.sub ? b.r * 0.12 : 0));
-      if (b.sub) {
-        ctx.font = `700 ${Math.round(9 * s)}px ${FONT_UI}`;
-        ctx.fillText(b.sub, b.x, b.y + b.r * 0.55);
-      }
+      // rótulo em português (palavras); duas palavras quebram em duas linhas
+      const words = (b.text || b.label).split(' ');
+      const fs = Math.round(b.r * (words.length > 1 ? 0.3 : (b.text || b.label).length > 6 ? 0.3 : 0.38));
+      ctx.font = `700 ${fs}px ${FONT_UI}`;
+      words.forEach((wd, i) => ctx.fillText(wd, b.x, b.y + (i - (words.length - 1) / 2) * fs * 1.1));
       ctx.restore();
     }
   },

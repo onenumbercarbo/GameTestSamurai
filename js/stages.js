@@ -170,8 +170,10 @@ const STAGES = [
     id: 'kurokama',
     name: 'Santuário de Kurokama',
     kanji: '黒鎌神社',
-    ground: 'shrine',
-    ambient: 'petals',
+    ground: 'storm',
+    ambient: null,
+    weather: 'storm',   // chuva, relâmpagos e correção de cor (js/storm.js)
+    mosaic: true,       // piso cerimonial de mosaico no lugar das lajes
     size: [26, 26],
     start: [3, 22],
     exit: null,
@@ -179,20 +181,22 @@ const STAGES = [
     story: [
       'O santuário de Kurokama foi abandonado pelos monges há uma geração. Agora pertence a um único homem.',
       'Gendō, o Ceifador. Dizem que sua foice já colheu cem espadas — e que ele guarda o Espelho da Lua no altar como troféu.',
-      'O rōnin sobe os últimos degraus.',
+      'Uma tempestade desaba sobre a montanha. O rōnin sobe os últimos degraus.',
     ],
     objective: 'Derrote Gendō e recupere a relíquia',
     path: [[1, 25], [4, 21], [7, 18], [10, 15], [13, 13]],
     plazas: [[13, 13, 6.8]],
     props: [
       ['shrine', 8, 7],
-      ...lanternRing(13, 13, 7.6, 12, [[120, 150], [210, 240]]),
+
       ['sakura', 21, 4], ['sakura', 4, 8.5], ['sakura', 22.5, 17], ['sakura', 16, 22.5],
     ],
     scatter: { seed: 21, count: 28, types: ['bamboo', 'bamboo', 'sakura'] },
     clear: [[13, 13, 8.6], [3, 22, 3], [7, 7, 3]],
     shots: [],
     waves: [],
+    // Braseiros em volta da arena (abertura para o caminho de entrada a sudoeste).
+    braziers: lanternRing(13, 13, 7.7, 10, [[110, 160]]).map(([, x, y]) => [x, y]),
     boss: { spawn: [15.5, 10.5], center: [13, 13], triggerR: 7.2, arenaR: 7.2, relic: [9.3, 8.6], adds: ['blue', 'black', 'gray'] },
   },
 ];

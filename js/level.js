@@ -145,6 +145,7 @@ const GROUND_STYLES = {
   forest: { base: [84, 34, 22], path: [34, 28, 30], stone: [30, 6, 45], deco: 'leaves' },
   camp: { base: [40, 22, 30], path: [30, 26, 24], stone: [25, 6, 44], deco: 'ash' },
   shrine: { base: [88, 22, 28], path: [30, 26, 34], stone: [30, 5, 50], deco: 'petals' },
+  storm: { base: [90, 14, 21], path: [26, 12, 25], stone: [25, 5, 34], deco: 'grass' },
 };
 
 const T_GRASS = 0, T_PATH = 1, T_STONE = 2;
@@ -607,6 +608,10 @@ class Level {
     // Praças: lajes de pedra assentadas em fiadas desencontradas.
     const S = st.stone;
     for (const [cx, cy, r] of this.stage.plazas || []) {
+      if (this.stage.mosaic) {
+        drawMosaic(g, cx, cy, r, rnd);
+        continue;
+      }
       g.filter = 'blur(5px)';
       g.fillStyle = hsl(S[0], S[1], S[2] - 12, 0.7);
       g.beginPath(); g.arc(cx, cy, r + 0.3, 0, Math.PI * 2); g.fill();

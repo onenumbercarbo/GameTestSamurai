@@ -28,6 +28,10 @@ Abra `index.html` no navegador do computador ou do celular.
 
 O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência de mira o vira para o inimigo mais próximo; parado e sem inimigos por perto, ele segue o mouse.
 
+## Arena do Gendō
+
+O santuário final tem clima de tempestade (`js/storm.js`): piso cerimonial de mosaico com anéis vermelhos e dourados, braseiros acesos em volta, chuva com respingos, relâmpagos e trovões, nuvens escuras e cores dessaturadas e quentes. A fase abre com um plano fechado atrás do rōnin que recua revelando a arena. Quando o Gendō cai, a tempestade passa.
+
 ## Guardiões das vilas (mini-chefes)
 
 Cada vila tem um guardião na arena de pedra antes do portão. O torii só abre depois que ele cai. Todos têm duas fases, ataques telegrafados no chão, defesa e postura, como o chefe final (`js/miniboss.js`):

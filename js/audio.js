@@ -62,8 +62,38 @@ const Sfx = (() => {
     osc.stop(t0 + dur + 0.05);
   }
 
+  // Chuva contínua: ruído em loop filtrado, liga/desliga suavemente.
+  let rainSrc = null, rainGain = null;
+  function setRain(on) {
+    if (!ac) return;
+    if (on && !rainSrc) {
+      rainSrc = ac.createBufferSource();
+      rainSrc.buffer = noiseBuf;
+      rainSrc.loop = true;
+      const f = ac.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = 1800;
+      f.Q.value = 0.4;
+      rainGain = ac.createGain();
+      rainGain.gain.value = 0.0001;
+      rainSrc.connect(f).connect(rainGain).connect(master);
+      rainSrc.start();
+      rainGain.gain.exponentialRampToValueAtTime(0.09, ac.currentTime + 1.5);
+    } else if (!on && rainSrc) {
+      const src = rainSrc;
+      rainGain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 1);
+      src.stop(ac.currentTime + 1.1);
+      rainSrc = null;
+    }
+  }
+
   return {
     unlock: ensure,
+    setRain,
+    thunder(delay = 0.4) {
+      noise(2.2, { type: 'lowpass', freq: 380, gain: 0.7, attack: 0.04, delay, sweepTo: 90 });
+      noise(0.4, { type: 'lowpass', freq: 1500, gain: 0.35, delay, sweepTo: 300 });
+    },
     get muted() { return muted; },
     toggleMute() {
       muted = !muted;

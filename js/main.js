@@ -330,6 +330,7 @@ class Cutscene {
       }
       w.bossFight = false;
       w.slowmoLeft = 1.6;
+      if (w.storm) { w.storm.strike(true); w.storm.calm(); }
       w.camera.shake(14);
       for (const e of w.enemies) if (e.alive) e.takeHit({ damage: 999, nx: 0, ny: 0, knockback: 0 });
       w.spawnQueue = [];
@@ -359,8 +360,31 @@ class Cutscene {
       w.showBanner('Relíquia recuperada!', { color: '#ffcf6a', dur: 2.8 });
     };
 
+    // Tempestade e braseiros (arena do Gendō).
+    w.braziers = (stage.braziers || []).map(([x, y]) => new Brazier(w, x, y));
+    w.storm = stage.weather === 'storm' ? new Storm(w) : null;
+
     // Plano de abertura (estabelecimento): começa no marco da vila e viaja até o Rōnin.
     const est = stage.establish;
+    if (w.storm && stage.boss) {
+      // Abertura cinematográfica: plano fechado logo atrás do rōnin, com a arena
+      // à frente; relâmpago; a câmera recua devagar revelando o piso e os braseiros.
+      const [ax, ay] = stage.boss.center;
+      const p0 = w.player;
+      const d = Math.hypot(ax - p0.x, ay - p0.y), ux = (ax - p0.x) / d, uy = (ay - p0.y) / d;
+      w.cutscene = new Cutscene([
+        {
+          x: () => p0.x + ux * 1.1, y: () => p0.y + uy * 1.1, zoom: 3.3, rate: 3, dur: 2.2, cut: true,
+          onStart: () => w.showBanner(stage.name, { kanji: stage.kanji, sub: stage.objective, dur: 3.6, y: 0.74 }),
+        },
+        { x: ax, y: ay, zoom: 1.2, rate: 0.55, dur: 3.2, onStart: () => w.storm.strike(true) },
+        { x: () => p0.x, y: () => p0.y, zoom: CONFIG.CAMERA.exploreZoom, rate: 1.6, dur: 1.4 },
+      ], null, true);
+      camera.setTarget(p0.x + ux * 1.1, p0.y + uy * 1.1, 3.3);
+      camera.cut();
+      camera.letterbox = 1;
+      return w;
+    }
     w.cutscene = new Cutscene([
       {
         x: est[0], y: est[1], zoom: est[2], rate: 0.6, dur: 1.9, cut: true,
@@ -582,7 +606,7 @@ class Cutscene {
             x: () => b.x, y: () => b.y, zoom: 2.4, rate: 2.2, dur: 1.4,
             onStart: () => w.showBanner(b.short, { kanji: b.kanji, sub: b.title, dur: 3.4, y: 0.26 }),
           },
-          { x: () => b.x, y: () => b.y, zoom: 2.7, rate: 3, dur: 1.7, onStart: () => b.awaken() },
+          { x: () => b.x, y: () => b.y, zoom: 2.7, rate: 3, dur: 1.7, onStart: () => { b.awaken(); if (w.storm) w.storm.strike(true); } },
           { x: () => (b.x + p.x) / 2, y: () => (b.y + p.y) / 2, zoom: 1.8, rate: 3, dur: 0.5 },
         ], () => { w.bossFight = true; });
       }
@@ -632,6 +656,7 @@ class Cutscene {
     for (const pk of w.pickups) pk.update(dt);
     w.pickups = w.pickups.filter((pk) => pk.alive);
     if (w.gate) w.gate.t += dt;
+    for (const br of w.braziers) br.update(dt);
     for (const c of w.chests) c.update(dt);
     for (const v of w.villagers) v.update(dt);
     w.villagers = w.villagers.filter((v) => v.alive);
@@ -726,7 +751,7 @@ class Cutscene {
       if (b.x1 < 0 || b.x0 > cam.viewW || b.y1 < 0 || b.y0 > cam.viewH) continue;
       list.push(pr);
     }
-    list.push(w.player, ...w.enemies, ...w.pickups, ...w.projectiles, ...w.chests, ...w.campfires, ...w.villagers);
+    list.push(w.player, ...w.enemies, ...w.pickups, ...w.projectiles, ...w.chests, ...w.campfires, ...w.villagers, ...w.braziers);
     if (w.boss) list.push(w.boss);
     if (w.gate) list.push(w.gate);
     const sorted = depthSort(list);
@@ -747,6 +772,15 @@ class Cutscene {
 
     w.effects.draw(ctx, cam);
     if (game.debug) renderDebug(w);
+  }
+
+  /** Clima por cima do mundo e abaixo do HUD; também liga/desliga o som da chuva. */
+  function renderWeather(w, realDt) {
+    const storm = w && w.storm;
+    Sfx.setRain(!!storm && game.state !== 'title' && storm.intensity > 0.3);
+    if (!storm) return;
+    if (game.state !== 'paused') storm.update(realDt);
+    storm.draw(ctx, camera);
   }
 
   function renderDebug(w) {
@@ -932,6 +966,7 @@ class Cutscene {
         w.time += realDt;
         w.effects.update(realDt);
         renderWorld(w);
+        renderWeather(w, realDt);
         renderAmbient(w.stage.ambient, realDt);
         UI.vignette(ctx, camera, 0);
         UI.letterbox(ctx, camera);
@@ -947,6 +982,7 @@ class Cutscene {
       case 'story': {
         directCamera(w, 0, realDt);
         renderWorld(w);
+        renderWeather(w, realDt);
         UI.story(ctx, camera, w.stage, game.t, w.index, STAGES.length);
         if (input.consumeConfirm()) {
           if (game.t * 55 < UI.storyLength(w.stage)) game.t = 999; // completa o texto
@@ -975,6 +1011,7 @@ class Cutscene {
         if (dt > 0) updateWorld(w, dt, realDt);
         directCamera(w, dt, realDt);
         renderWorld(w);
+        renderWeather(w, realDt);
         renderAmbient(w.stage.ambient, realDt);
         UI.vignette(ctx, camera, w.damageVignette);
         UI.letterbox(ctx, camera);
@@ -988,6 +1025,7 @@ class Cutscene {
 
       case 'paused':
         renderWorld(w);
+        renderWeather(w, realDt);
         UI.letterbox(ctx, camera);
         UI.hud(ctx, w);
         UI.pause(ctx, camera, game.items);
@@ -998,6 +1036,7 @@ class Cutscene {
         game.world.time += realDt;
         directCamera(w, 0, realDt);
         renderWorld(w);
+        renderWeather(w, realDt);
         UI.vignette(ctx, camera, 0.6);
         UI.gameOver(ctx, camera, game.t);
         if (game.t > 1 && input.consumeConfirm()) {
@@ -1018,6 +1057,7 @@ class Cutscene {
         updateWorld(w, dt, realDt);
         directCamera(w, dt, realDt);
         renderWorld(w);
+        renderWeather(w, realDt);
         renderAmbient('petals', realDt);
         UI.letterbox(ctx, camera);
         UI.victory(ctx, camera, game.t, game.stats);
@@ -1028,6 +1068,7 @@ class Cutscene {
       case 'transition':
         if (w) {
           renderWorld(w);
+        renderWeather(w, realDt);
           UI.letterbox(ctx, camera);
         } else {
           ctx.fillStyle = '#000';

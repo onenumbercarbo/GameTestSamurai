@@ -3,7 +3,7 @@ Extrai os sprites das folhas com fundo verde (chroma key) e gera:
   assets/sprites/<nome>.png  — PNG com transparência, já recortado
   js/atlas.js                — tamanhos e ponto de ancoragem (pés) de cada sprite
 
-Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg>
+Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg>
 
 Cada quadro é definido por um retângulo generoso na folha. Dentro dele mantemos
 o maior componente conectado e qualquer componente que NÃO toque a borda do
@@ -106,10 +106,35 @@ FRAMES = {
     'fern': (3, 884, 922, 992, 1012, {}),
     'fern2': (3, 858, 1182, 982, 1270, {}),
     'grass_tall': (3, 1348, 792, 1448, 892, {}),
+    # ---------------- Aldeões presos e bandidos do acampamento (folha 4) ----------------
+    'villager_kneel': (4, 32, 72, 208, 312, {}),
+    'villager_kneel2': (4, 232, 76, 418, 312, {}),
+    'villager_post': (4, 482, 6, 604, 326, {}),
+    'villager_post2': (4, 648, 6, 772, 330, {}),
+    'villager_bow': (4, 772, 88, 928, 308, {}),
+    'villager_pray_kneel': (4, 952, 82, 1112, 308, {}),
+    'villager_rise': (4, 1166, 52, 1314, 312, {}),
+    'villager_pray': (4, 1396, 38, 1524, 312, {}),
+    'villager_cut': (4, 1636, 18, 1790, 318, {}),
+    'villager_thank': (4, 1826, 12, 1954, 314, {}),
+    'bandit_drink': (4, 12, 342, 202, 608, {}),
+    'bandit_drink2': (4, 204, 342, 388, 608, {}),
+    'bandit_laugh': (4, 396, 342, 590, 608, {}),
+    'bandit_ground': (4, 602, 352, 812, 598, {}),
+    'bandit_dance': (4, 812, 312, 1014, 614, {}),
+    'bandit_dance2': (4, 1026, 322, 1218, 614, {}),
+    'bandit_sleep': (4, 1696, 352, 1978, 598, {'keep_all_inner': True}),
+    'camp_cookpot': (4, 470, 622, 872, 1064, {'keep_all_inner': True}),
+    'camp_log_bottles': (4, 888, 698, 1162, 896, {'keep_all_inner': True}),
+    'camp_log': (4, 906, 900, 1178, 1084, {}),
+    'camp_sake': (4, 1158, 688, 1288, 802, {'keep_all_inner': True}),
+    'camp_barrels': (4, 1280, 656, 1434, 828, {'keep_all_inner': True}),
+    'camp_firepit': (4, 1178, 818, 1482, 1078, {'keep_all_inner': True}),
+    'camp_tent': (4, 1448, 618, 1996, 1068, {'keep_all_inner': True}),
 }
 
 # Cor de fundo de cada folha (as duas primeiras são verde-chroma, a terceira verde-claro).
-SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166)}
+SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9)}
 
 
 def key(rgb, bg=BG):
@@ -156,11 +181,11 @@ def label(mask):
     return lab, comps
 
 
-CHARACTER_PREFIXES = ('boss_', 'hero_', 'ninja_', 'gray_', 'black_')
+CHARACTER_PREFIXES = ('boss_', 'hero_', 'ninja_', 'gray_', 'black_', 'villager_', 'bandit_')
 
 # Ajustes manuais de âncora X (em pixels do PNG final) onde a heurística dos pés erra
 # (ex.: explosão no chão do golpe do boss, perna aberta no rugido).
-ANCHOR_X = {'boss_roar0': 55, 'boss_slam': 50}
+ANCHOR_X = {'boss_roar0': 55, 'boss_slam': 50, 'bandit_ground': 55}
 
 
 def extract(sheet, x0, y0, x1, y1, opts, character=False, bg=BG):
@@ -230,26 +255,11 @@ def recolor(img, gain, offset):
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
 
 
-VILLAGERS = {'villager_a': (190, 150, 100), 'villager_b': (110, 135, 185), 'villager_c': (165, 95, 80)}
-
-
-def colorize(img, tone):
-    """Tinge o sprite com um tom (mantendo luz/sombra) e preserva a pele."""
-    a = np.asarray(img).astype(float)
-    rgb, alpha = a[..., :3], a[..., 3:]
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    skin = (r > g + 12) & (g > b + 8) & (r > 120)
-    lum = (0.3 * r + 0.59 * g + 0.11 * b) / 255.0
-    lum = np.clip(lum * 1.9, 0, 1.25)
-    out = np.stack([np.clip(lum * c, 0, 255) for c in tone], -1)
-    out = np.where(skin[..., None], rgb, out)
-    return Image.fromarray(np.concatenate([out, alpha], -1).astype(np.uint8), 'RGBA')
-
-
-def main(boss_path, hero_path, forest_path):
+def main(boss_path, hero_path, forest_path, camp_path):
     sheets = {1: np.asarray(Image.open(boss_path).convert('RGB')),
               2: np.asarray(Image.open(hero_path).convert('RGB')),
-              3: np.asarray(Image.open(forest_path).convert('RGB'))}
+              3: np.asarray(Image.open(forest_path).convert('RGB')),
+              4: np.asarray(Image.open(camp_path).convert('RGB'))}
     os.makedirs(OUT, exist_ok=True)
     atlas = {}
     for name, (s, x0, y0, x1, y1, opts) in FRAMES.items():
@@ -271,12 +281,6 @@ def main(boss_path, hero_path, forest_path):
             name = src.replace('ninja_', tag + '_')
             recolor(base, gain, off).save(os.path.join(OUT, name + '.png'), optimize=True)
             atlas[name] = dict(atlas[src])
-    # Aldeões: a pose acuada do ninja (mãos para cima, agachado) recolorida
-    # com roupas de camponês. Usada para os reféns que o rōnin liberta.
-    base = Image.open(os.path.join(OUT, 'ninja_crouch.png'))
-    for name, tone in VILLAGERS.items():
-        colorize(base, tone).save(os.path.join(OUT, name + '.png'), optimize=True)
-        atlas[name] = dict(atlas['ninja_crouch'])
     with open(os.path.join(ROOT, 'js', 'atlas.js'), 'w') as f:
         f.write('/* Gerado por tools/extract_sprites.py — não editar à mão.\n'
                 ' * w/h: tamanho do PNG; ax/ay: ponto de apoio (pés) em pixels do PNG. */\n')
@@ -284,4 +288,4 @@ def main(boss_path, hero_path, forest_path):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(*sys.argv[1:5])

@@ -20,6 +20,11 @@ const NINJA_TYPES = {
     label: 'Batedor', hp: 28, speed: 3.7, damage: 8, windup: 0.34, range: 1.2, arc: 100, lunge: 9, recover: 0.4,
     sprites: { idle: 'gray_idle', walk: ['gray_walk1', 'gray_idle', 'gray_walk2', 'gray_idle'], windup: 'gray_raise', strike: 'gray_strike', hurt: 'gray_crouch' },
   },
+  // Bandido do acampamento: briga de mãos nuas (sprites da folha do acampamento).
+  brute: {
+    label: 'Bandido', hp: 42, speed: 3.0, damage: 9, windup: 0.45, range: 1.1, arc: 110, lunge: 6, recover: 0.55,
+    sprites: { idle: 'bandit_dance2', walk: ['bandit_dance', 'bandit_dance2'], windup: 'bandit_dance2', strike: 'bandit_dance', hurt: 'bandit_ground' },
+  },
   black: {
     label: 'Assassino', hp: 52, speed: 2.5, damage: 13, windup: 0.55, range: 1.3, arc: 120, lunge: 7, recover: 0.6, ranged: true,
     sprites: { idle: 'black_idle', walk: ['black_walk1', 'black_idle', 'black_walk2', 'black_idle'], windup: 'black_raise', strike: 'black_lunge', hurt: 'black_crouch' },
@@ -39,6 +44,7 @@ class Ninja extends Actor {
     this.hp = this.maxHp = this.type.hp;
     this.encounter = opts.encounter || null;
     this.pose = opts.pose || 'idle'; // 'sit' perto da fogueira, 'idle' de vigia
+    this.campSprite = opts.campSprite || null; // pose de acampamento (bebendo, dormindo...)
     if (opts.face !== undefined) this.facing = opts.face;
     this.alertT = 0;
     this.state = this.encounter ? 'camp' : 'spawn';
@@ -241,9 +247,9 @@ class Ninja extends Actor {
     let name = S.idle, rotate = 0, alpha = 1;
     switch (this.state) {
       case 'spawn': alpha = clamp((this.t - 0.15) / 0.25, 0, 1); break;
-      case 'camp': name = this.pose === 'sit' ? S.hurt : S.idle; break;
+      case 'camp': name = this.campSprite || (this.pose === 'sit' ? S.hurt : S.idle); break;
       case 'alerting': name = S.windup; break;
-      case 'chase': name = Math.hypot(this.vx, this.vy) > 0.3 ? S.walk[Math.floor(this.animTime * 9) % 4] : S.idle; break;
+      case 'chase': name = Math.hypot(this.vx, this.vy) > 0.3 ? S.walk[Math.floor(this.animTime * 9) % S.walk.length] : S.idle; break;
       case 'windup': case 'aim': name = S.windup; break;
       case 'strike': case 'throw': name = S.strike; break;
       case 'recover': case 'hurt': name = S.hurt; break;
@@ -677,9 +683,9 @@ class Campfire {
     this.y = y;
     this.t = Math.random() * 10;
     this.alive = true;
-    this.box = { x0: x - 0.3, y0: y - 0.3, x1: x + 0.3, y1: y + 0.3 };
+    this.box = { x0: x - 0.55, y0: y - 0.55, x1: x + 0.55, y1: y + 0.55 };
     this.smokeT = 0;
-    world.level.addPost(x, y, 0.3);
+    world.level.addPost(x, y, 0.55);
   }
 
   update(dt) {
@@ -694,56 +700,32 @@ class Campfire {
   draw(ctx, cam) {
     const s = cam.scale;
     const c = cam.worldToScreen(this.x, this.y);
-    const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, 70 * s);
-    g.addColorStop(0, `rgba(255,150,60,${0.32 + 0.06 * Math.sin(this.t * 13)})`);
+    // luz da fogueira no chão
+    const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, 80 * s);
+    g.addColorStop(0, `rgba(255,150,60,${0.34 + 0.07 * Math.sin(this.t * 13)})`);
     g.addColorStop(1, 'rgba(255,150,60,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, 70 * s, 35 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, c.y, 80 * s, 40 * s, 0, 0, Math.PI * 2);
     ctx.fill();
-    // pedras e lenha
-    ctx.fillStyle = '#5b5750';
-    for (let k = 0; k < 7; k++) {
-      const a = (k / 7) * Math.PI * 2;
-      const p = cam.worldToScreen(this.x + Math.cos(a) * 0.3, this.y + Math.sin(a) * 0.3);
-      ctx.beginPath(); ctx.ellipse(p.x, p.y, 4 * s, 2.6 * s, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.strokeStyle = '#4a2c17';
-    ctx.lineWidth = 3.5 * s;
-    ctx.beginPath();
-    ctx.moveTo(c.x - 10 * s, c.y - 1 * s); ctx.lineTo(c.x + 10 * s, c.y - 5 * s);
-    ctx.moveTo(c.x - 9 * s, c.y - 5 * s); ctx.lineTo(c.x + 9 * s, c.y);
-    ctx.stroke();
-    // chamas
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (let k = 0; k < 3; k++) {
-      const h = (16 + 6 * Math.sin(this.t * 9 + k * 2)) * s;
-      const wv = (6 - k * 1.5) * s;
-      const x = c.x + (k - 1) * 4 * s;
-      ctx.fillStyle = k === 1 ? 'rgba(255,220,120,0.9)' : 'rgba(255,110,40,0.75)';
-      ctx.beginPath();
-      ctx.moveTo(x - wv, c.y - 3 * s);
-      ctx.quadraticCurveTo(x - wv, c.y - h * 0.6, x, c.y - h);
-      ctx.quadraticCurveTo(x + wv, c.y - h * 0.6, x + wv, c.y - 3 * s);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
+    // fogueira com espetos (sprite) + tremulação da chama
+    const f = 1 + 0.03 * Math.sin(this.t * 17);
+    Sprites.draw(ctx, 'camp_firepit', c.x, c.y + 6 * s, 0.55 * s * f, {});
   }
 }
 
 /**
- * Aldeão refém: amarrado, agachado e pedindo socorro perto dos bandidos.
- * Depois que o grupo que o vigia é derrotado, o rōnin o liberta com E.
- * Sprite: pose acuada recolorida + chapéu de palha (sugegasa) e corda desenhados.
+ * Aldeão refém (sprites da folha do acampamento): amarrado a um poste ou
+ * ajoelhado com as mãos atadas, pedindo socorro perto dos bandidos.
+ * Depois que o grupo que o vigia cai, o rōnin corta a corda com E:
+ *   villager_cut (corda cortada) -> villager_rise (levanta) -> agradece -> some.
  */
 class Villager {
-  constructor(world, x, y, look, encounter) {
+  constructor(world, x, y, post, encounter) {
     this.world = world;
     this.x = x;
     this.y = y;
-    this.look = look; // 'villager_a' | 'villager_b' | 'villager_c'
+    this.post = post; // amarrado num poste?
     this.encounter = encounter;
     this.freed = false;
     this.freedT = 0;
@@ -752,6 +734,7 @@ class Villager {
     this.radius = 0.3;
     this.facing = Math.random() < 0.5 ? 0 : Math.PI / 2;
     this.box = { x0: x - 0.3, y0: y - 0.3, x1: x + 0.3, y1: y + 0.3 };
+    if (post) world.level.addPost(x - 0.15, y - 0.15, 0.22);
   }
 
   get locked() {
@@ -773,6 +756,7 @@ class Villager {
     w.player.heal(20);
     w.effects.text(this.x, this.y, 'Obrigado, rōnin!', '#ffe9a8', true);
     w.effects.sparks(this.x, this.y, -Math.PI * 0.75, 10, '#c89a5a', 2);
+    Sfx.swing(0);
     Sfx.pickup();
     const left = w.villagers.filter((v) => !v.freed).length;
     w.showBanner('Aldeão libertado', { sub: left ? `Ainda há ${left} em perigo nesta vila (+20 de vida)` : 'Todos os aldeões desta vila estão a salvo (+20 de vida)', dur: 2.2, y: 0.24, color: '#ffe9a8' });
@@ -782,78 +766,49 @@ class Villager {
     this.t += dt;
     if (this.freed) {
       this.freedT += dt;
-      if (this.freedT > 2.2) this.alive = false;
-    } else {
-      // Olha para o perigo mais próximo (ou para o rōnin).
-      const p = this.world.player;
-      this.facing = Math.atan2(p.y - this.y, p.x - this.x);
+      if (this.freedT > 2.6) this.alive = false;
     }
+  }
+
+  sprite() {
+    if (this.freed) {
+      const k = this.freedT;
+      if (k < 0.4) return 'villager_cut';
+      if (k < 0.8) return 'villager_rise';
+      return Math.floor(k * 2) % 2 ? 'villager_thank' : 'villager_pray';
+    }
+    if (this.post) return Math.floor(this.t * 1.2) % 2 ? 'villager_post2' : 'villager_post';
+    // quando o jogador chega perto (e já é seguro), junta as mãos implorando
+    if (this.near() && !this.locked) return 'villager_pray_kneel';
+    return ['villager_kneel', 'villager_kneel2', 'villager_bow'][Math.floor(this.t * 0.9) % 3];
   }
 
   draw(ctx, cam) {
     const s = cam.scale;
-    const sc = CONFIG.SPRITE_SCALE * 0.9;
     const g = cam.worldToScreen(this.x, this.y);
-    const flip = Math.cos(this.facing) - Math.sin(this.facing) < 0;
-    const alpha = this.freed ? clamp(1 - (this.freedT - 1.4) / 0.8, 0, 1) : 1;
+    const alpha = this.freed ? clamp(1 - (this.freedT - 1.8) / 0.8, 0, 1) : 1;
     if (alpha <= 0) return;
-    // tremendo de medo enquanto preso
-    const shiver = this.freed ? 0 : Math.sin(this.t * 40) * 0.8 * s;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    const shiver = this.freed ? 0 : Math.sin(this.t * 40) * 0.6 * s; // tremendo de medo
+    ctx.fillStyle = `rgba(0,0,0,${0.3 * alpha})`;
     ctx.beginPath();
     ctx.ellipse(g.x, g.y, Iso.HW * 0.45 * s, Iso.HH * 0.45 * s, 0, 0, Math.PI * 2);
     ctx.fill();
-    Sprites.draw(ctx, this.look, g.x + shiver, g.y, sc * s, { flip, alpha });
-    const m = ATLAS[this.look];
-    const k = sc * s;
-    const dir = flip ? -1 : 1;
-    const hx = g.x + shiver + (30 - m.ax) * k * dir;
-    const hy = g.y + (16 - m.ay) * k;
-    // chapéu de palha cônico
-    ctx.fillStyle = '#c9a45c';
-    ctx.strokeStyle = '#5a4020';
-    ctx.lineWidth = 1.2 * s;
-    ctx.beginPath();
-    ctx.moveTo(hx - 26 * k, hy + 4 * k);
-    ctx.lineTo(hx, hy - 13 * k);
-    ctx.lineTo(hx + 26 * k, hy + 4 * k);
-    ctx.quadraticCurveTo(hx, hy + 10 * k, hx - 26 * k, hy + 4 * k);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(90,64,32,0.6)';
-    ctx.beginPath();
-    ctx.moveTo(hx, hy - 13 * k); ctx.lineTo(hx - 10 * k, hy + 6 * k);
-    ctx.moveTo(hx, hy - 13 * k); ctx.lineTo(hx + 10 * k, hy + 6 * k);
-    ctx.stroke();
-    if (!this.freed) {
-      // corda amarrando o corpo
-      ctx.strokeStyle = '#a8814a';
-      ctx.lineWidth = 2.2 * s;
-      const by = g.y - 52 * k;
-      ctx.beginPath();
-      ctx.moveTo(g.x - 18 * k, by - 6 * k); ctx.lineTo(g.x + 18 * k, by + 4 * k);
-      ctx.moveTo(g.x - 18 * k, by + 8 * k); ctx.lineTo(g.x + 18 * k, by + 16 * k);
-      ctx.stroke();
-    }
-    ctx.restore();
+    Sprites.draw(ctx, this.sprite(), g.x + shiver, g.y, CONFIG.SPRITE_SCALE * s, { alpha });
 
     // balão: pedido de socorro / instrução
     const p = this.world.player;
     const d = Math.hypot(p.x - this.x, p.y - this.y);
-    let msg = null, color = '#ffffff';
+    let msg = null, color = '#7a1d16';
     if (this.freed) {
       msg = null;
     } else if (this.near()) {
-      msg = this.locked ? 'Cuidado! Os bandidos ainda estão aqui!' : 'E — libertar o aldeão';
-      color = this.locked ? '#ff9a80' : '#ffcf6a';
+      msg = this.locked ? 'Cuidado! Os bandidos ainda estão aqui!' : 'E — cortar as cordas';
+      color = this.locked ? '#8a2a1c' : '#6b4a10';
     } else if (d < 9 && Math.floor(this.t * 1.5) % 3 !== 2) {
       msg = 'Socorro!';
     }
     if (msg) {
-      const t = cam.worldToScreen(this.x, this.y, 88);
+      const t = cam.worldToScreen(this.x, this.y, this.post ? 120 : 90);
       ctx.save();
       ctx.font = `700 ${Math.round(13 * Math.min(s, 1.4))}px ${FONT_UI}`;
       ctx.textAlign = 'center';
@@ -869,7 +824,7 @@ class Villager {
       ctx.lineTo(t.x - wd / 2, t.y + 6);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = color === '#ffffff' ? '#7a1d16' : color === '#ffcf6a' ? '#6b4a10' : '#8a2a1c';
+      ctx.fillStyle = color;
       ctx.fillText(msg, t.x, t.y);
       ctx.restore();
     }

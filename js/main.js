@@ -157,8 +157,12 @@ class Cutscene {
 
   /* ------------------------------ criação do mundo ------------------------------ */
 
-  function createWorld(index, hp) {
-    const stage = STAGES[index];
+  /**
+   * Cria o mundo de uma vila. Sem semente, sorteia uma nova: cada entrada
+   * (inclusive tentar de novo após morrer) gera um mapa diferente.
+   */
+  function createWorld(index, hp, seed = Math.floor(Math.random() * 1e9)) {
+    const stage = buildStage(index, seed);
     const w = {
       stage,
       index,
@@ -216,10 +220,10 @@ class Cutscene {
 
     // Aldeões em perigo: um refém junto de cada emboscada do caminho.
     w.villagers = [];
-    const looks = ['villager_a', 'villager_b', 'villager_c'];
-    w.encounters.filter((e) => !e.guard).forEach((enc, i) => {
-      const q = w.level.randomFreeNear(enc.center[0], enc.center[1], 0.6, 1.8);
-      w.villagers.push(new Villager(w, q.x, q.y, looks[i % looks.length], enc));
+    w.encounters.filter((e) => !e.guard).forEach((enc) => {
+      let q = w.level.randomFreeNear(enc.center[0], enc.center[1], 0.6, 1.8);
+      for (let k = 0; k < 20 && !w.reachable(q.x, q.y); k++) q = w.level.randomFreeNear(enc.center[0], enc.center[1], 0.6, 2.6);
+      w.villagers.push(new Villager(w, q.x, q.y, Math.random() < 0.5, enc));
     });
     w.villagersStart = w.villagers.length;
     w.rescuedHere = 0;
@@ -353,7 +357,15 @@ class Cutscene {
     const stage = w.stage, L = w.level;
     const rnd = makeRng(index * 1013 + 17);
     const taken = [];
-    const free = (x, y) => L.isFree(x, y, 0.35) && taken.every((t) => Math.hypot(t.x - x, t.y - y) > 0.8)
+    // Só aceita posições alcançáveis a partir do início (sem bolsões fechados de bambu).
+    L.flowTimer = 0;
+    L.updateFlow(stage.start[0], stage.start[1], 1);
+    const reachable = (x, y) => {
+      const i = Math.floor(x), j = Math.floor(y);
+      return i >= 0 && j >= 0 && i < L.W && j < L.H && L.flow[j * L.W + i] >= 0;
+    };
+    w.reachable = reachable;
+    const free = (x, y) => L.isFree(x, y, 0.35) && reachable(x, y) && taken.every((t) => Math.hypot(t.x - x, t.y - y) > 0.8)
       && Math.hypot(x - stage.start[0], y - stage.start[1]) > 4.5;
     for (const enc of w.encounters) {
       enc.members = [];
@@ -375,18 +387,34 @@ class Cutscene {
       };
       if (enc.guard) {
         let f = { x: cx, y: cy };
-        if (!L.isFree(cx, cy, 0.7)) f = L.randomFreeNear(cx, cy, 0.3, 1.6);
+        if (!L.isFree(cx, cy, 0.9)) f = L.randomFreeNear(cx, cy, 0.3, 1.6);
         w.campfires.push(new Campfire(w, f.x, f.y));
+        // Cenário do acampamento em volta da fogueira (cada item só entra se couber).
+        const deco = [['camp_tent', -2.1, -1.7], ['camp_cookpot', 1.9, -1.4], ['camp_barrels', -2.8, 0.6],
+          ['camp_sake', 0.5, -2.6], ['camp_log_bottles', 2.0, 1.8], ['camp_log', -1.2, 2.4]];
+        for (const [type, dx, dy] of deco) {
+          const x = f.x + dx, y = f.y + dy;
+          if (!L.isFree(x, y, 0.55)) continue;
+          if (w.chests.some((c) => Math.hypot(c.x - x, c.y - y) < 1.3)) continue;
+          L.addProp(type, x, y);
+        }
+        // Primeiro grupo: bandidos à toa na fogueira (bebendo, rindo, dormindo, dançando).
+        const poses = ['bandit_drink', 'bandit_drink2', 'bandit_laugh', 'bandit_ground', 'bandit_sleep', 'bandit_dance'];
         const g = groups.shift();
         g.forEach((type, i) => {
           let pos = null;
-          for (let k = 0; k < 10 && !pos; k++) {
-            const a = (i / g.length) * Math.PI * 2 + 0.5 + k * 0.35;
-            const x = f.x + Math.cos(a) * 1.15, y = f.y + Math.sin(a) * 1.15;
+          for (let k = 0; k < 12 && !pos; k++) {
+            const a = (i / g.length) * Math.PI * 2 + 0.6 + k * 0.33;
+            const x = f.x + Math.cos(a) * 1.45, y = f.y + Math.sin(a) * 1.45;
             if (free(x, y)) pos = { x, y };
           }
           pos = pos || fallback();
-          add(type, pos, rnd() < 0.6 ? 'sit' : 'idle', Math.atan2(f.y - pos.y, f.x - pos.x));
+          const n = new Ninja(w, 'brute', pos.x, pos.y, {
+            encounter: enc, face: Math.atan2(f.y - pos.y, f.x - pos.x), campSprite: poses[Math.floor(rnd() * poses.length)],
+          });
+          enc.members.push(n);
+          w.enemies.push(n);
+          taken.push(pos);
         });
       }
       const spots = L.hideSpots(cx, cy, enc.r - 0.8);
@@ -395,6 +423,20 @@ class Cutscene {
           const sp = spots.find((q) => free(q.x, q.y));
           const pos = sp || fallback();
           add(type, pos, 'idle', Math.atan2(cy - pos.y, cx - pos.x));
+        }
+      }
+    }
+    // A decoração dos acampamentos pode ter fechado algum canto: quem ficou
+    // inalcançável é realocado para perto do centro do seu grupo.
+    L.flowTimer = 0;
+    L.updateFlow(stage.start[0], stage.start[1], 1);
+    for (const enc of w.encounters) {
+      for (const m of enc.members) {
+        if (reachable(m.x, m.y)) continue;
+        for (let k = 0; k < 120; k++) {
+          const a = rnd() * Math.PI * 2, r = 1.2 + rnd() * (enc.r - 1.5);
+          const x = enc.center[0] + Math.cos(a) * r, y = enc.center[1] + Math.sin(a) * r;
+          if (L.isFree(x, y, 0.35) && reachable(x, y)) { m.x = x; m.y = y; break; }
         }
       }
     }
@@ -785,7 +827,7 @@ class Cutscene {
     game.state = 'transition';
     fadeTo(() => {
       game.stats = newStats();
-      game.world = createWorld(0);
+      game.world = createWorld(0, undefined, 20261108);
       game.world.cutscene = null;
       game.state = 'title';
       game.t = 0;
@@ -969,7 +1011,7 @@ class Cutscene {
 
   Promise.all([Assets.load((f) => (game.loadFrac = f)), fontsReady]).then(() => {
     game.stats = newStats();
-    game.world = createWorld(0);
+    game.world = createWorld(0, undefined, 20261108);
     game.world.cutscene = null;
     game.save = loadSave();
     game.state = 'title';
@@ -979,4 +1021,5 @@ class Cutscene {
 
   requestAnimationFrame(frame);
   window.__game = game; // para depuração no console
+  window.__createWorld = createWorld;
 })();

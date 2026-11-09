@@ -47,6 +47,14 @@ const PROP_TYPES = {
   rock_big: { scale: 0.8, solid: 'circle', r: 0.3 },
   rock_tall: { scale: 0.8, solid: 'circle', r: 0.3 },
   rock_flat: { scale: 0.8, solid: 'circle', r: 0.4 },
+  // Acampamento dos bandidos (folha 4).
+  camp_tent: { scale: 0.7, solid: 'box', shrink: 0.7 },
+  camp_cookpot: { scale: 0.55, solid: 'circle', r: 0.55, off: -0.2 },
+  camp_firepit: { scale: 0.55, solid: 'circle', r: 0.5, off: -0.25 },
+  camp_log: { scale: 0.6, solid: 'circle', r: 0.4, off: -0.5 },
+  camp_log_bottles: { scale: 0.6, solid: 'circle', r: 0.4, off: -0.4 },
+  camp_sake: { scale: 0.65, solid: 'circle', r: 0.3, off: -0.15 },
+  camp_barrels: { scale: 0.65, solid: 'circle', r: 0.4, off: -0.3 },
   // Vegetação rasteira: só decoração, não bloqueia.
   fern: { scale: 0.8, solid: 'none', r: 0.25 },
   fern2: { scale: 0.8, solid: 'none', r: 0.25 },
@@ -57,7 +65,7 @@ const PROP_TYPES = {
 const BORDER_FAR = ['forest_mixed', 'forest_broadleaf', 'bamboo_grove', 'forest_pines', 'pine', 'forest_mixed', 'forest_sakura'];
 // Na frente do mapa (lados sul/leste, mais perto da câmera) só vegetação baixa,
 // para as árvores não taparem a luta.
-const BORDER_LOW = ['bush_big', 'bush_dark', 'bush_round', 'bush_a', 'rock_moss', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'tree_small', 'bush_big'];
+const BORDER_LOW = ['bush_big', 'bush_round', 'bush_a', 'rock_moss', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'tree_small', 'bush_big'];
 const BORDER = 9; // largura (em tiles) da faixa de floresta ao redor do mapa
 
 class Prop {
@@ -213,7 +221,7 @@ class Level {
     // Vegetação baixa (arbustos, pedras, samambaias) espalhada pelo mapa.
     if (stage.decor !== 0) {
       const rnd = makeRng((stage.scatter ? stage.scatter.seed : 1) * 31 + 7);
-      const types = ['bush_a', 'bush_big', 'bush_dark', 'bush_round', 'rock_moss', 'rock_big', 'rock_tall', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'fern', 'grass_tall'];
+      const types = ['bush_a', 'bush_big', 'bush_round', 'rock_moss', 'rock_big', 'rock_tall', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'fern', 'grass_tall'];
       let placed = 0, tries = 0;
       const want = stage.decor || 26;
       while (placed < want && tries++ < 2000) {
@@ -249,6 +257,16 @@ class Level {
   solids() {
     if (!this._solids) this._solids = [...this.props.filter((p) => p.def.solid !== 'none'), ...this.posts];
     return this._solids;
+  }
+
+  /** Acrescenta um objeto de cenário depois da criação (ex.: montagem dos acampamentos). */
+  addProp(type, x, y) {
+    const p = new Prop(type, x, y);
+    p.level = this;
+    this.props.push(p);
+    this._solids = null;
+    this.rebuildBlocked();
+    return p;
   }
 
   addPost(x, y, r) {

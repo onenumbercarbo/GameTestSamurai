@@ -3,7 +3,7 @@ Extrai os sprites das folhas com fundo verde (chroma key) e gera:
   assets/sprites/<nome>.png  — PNG com transparência, já recortado
   js/atlas.js                — tamanhos e ponto de ancoragem (pés) de cada sprite
 
-Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg>
+Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg> <costas_oni_ronin.jpg> <costas_kunoichi.jpg> <costas_aldeoes.jpg> <floresta2.jpg>
 
 Cada quadro é definido por um retângulo generoso na folha. Dentro dele mantemos
 o maior componente conectado e qualquer componente que NÃO toque a borda do
@@ -156,10 +156,32 @@ FRAMES = {
     'ronin_low': (5, 1703, 1098, 2103, 1483, {}),
     'ronin_dual': (5, 2081, 1101, 2419, 1483, {}),
     'ronin_raise': (5, 2419, 1054, 2735, 1492, {}),
+    # ---------------- Poses de costas (folhas 6, 7, 8) e cenário novo (folha 9) ----------------
+    'oni_back_raise': (6, 1015, 10, 1305, 525, {}),
+    'oni_back_raise2': (6, 1360, 0, 1665, 530, {}),
+    'oni_back_slam': (6, 1640, 100, 1985, 530, {}),
+    'ronin_back': (6, 1015, 560, 1315, 840, {}),
+    'ronin_back_cape': (6, 360, 830, 645, 1105, {}),
+    'ronin_back_raise': (6, 1005, 800, 1315, 1105, {}),
+    'ronin_back_dual': (6, 1325, 830, 1700, 1105, {}),
+    'kuno_back': (7, 830, 350, 1015, 605, {}),
+    'kuno_back2': (7, 1040, 355, 1215, 605, {}),
+    'villager_back_kneel': (8, 250, 80, 395, 305, {}),
+    'villager_back_walk': (8, 1390, 40, 1520, 312, {}),
+    'bandit_back_dance': (8, 1035, 322, 1212, 612, {}),
+    'fence': (9, 1185, 1078, 1400, 1272, {'only_main': True}),
+    'bonsai_pine': (9, 1295, 205, 1612, 642, {'only_main': True, 'drop_teal': True, 'clip': [(1295, 470, 1345, 642), (1295, 205, 1335, 420), (1490, 205, 1612, 345), (1400, 205, 1462, 272)]}),
+    'cliff_long': (9, 38, 1138, 432, 1412, {'only_main': True}),
+    'cliff_end': (9, 1532, 1108, 1952, 1408, {'only_main': True}),
+    'cliff_block': (9, 1402, 982, 1658, 1178, {'only_main': True}),
+    'slope_path': (9, 468, 1258, 708, 1418, {'only_main': True}),
+    'slope_roots': (9, 748, 1268, 972, 1418, {'only_main': True}),
+    'slope_roots2': (9, 1242, 1188, 1502, 1422, {'only_main': True, 'clip': [(1242, 1188, 1330, 1250)]}),
 }
 
 # Cor de fundo de cada folha (as duas primeiras são verde-chroma, a terceira verde-claro).
-SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9), 5: (12, 226, 8)}
+SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9), 5: (12, 226, 8),
+            6: (4, 234, 1), 7: (9, 218, 2), 8: (11, 219, 3), 9: (174, 219, 162)}
 
 
 def key(rgb, bg=BG):
@@ -222,6 +244,10 @@ def extract(sheet, x0, y0, x1, y1, opts, character=False, bg=BG):
         col[..., 1] = np.minimum(col[..., 1], lim)
     for cx0, cy0, cx1, cy1 in opts.get('clip', []):
         a[max(cy0 - y0, 0):max(cy1 - y0, 0), max(cx0 - x0, 0):max(cx1 - x0, 0)] = 0
+    if opts.get('drop_teal'):
+        # remove a árvore azul-petróleo vizinha (folhas do bonsai são verdes: G > B)
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        a = np.where((b >= g - 6) & (b > r + 12), 0, a)
     if opts.get('nohaze'):
         # Remove a "névoa" esverdeada (fumaça/tora atrás do sprite tingida pelo fundo).
         r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
@@ -240,7 +266,7 @@ def extract(sheet, x0, y0, x1, y1, opts, character=False, bg=BG):
     biggest = max(comps, key=lambda c: c[1])
     keep = np.zeros_like(mask)
     for n, cnt, border in comps:
-        if n == biggest[0] or (not border and (cnt > 12 or opts.get('keep_all_inner'))):
+        if n == biggest[0] or (not border and not opts.get('only_main') and (cnt > 12 or opts.get('keep_all_inner'))):
             keep |= lab == n
     # inclui a franja semitransparente vizinha aos pixels mantidos (bordas suaves)
     grown = keep.copy()
@@ -324,12 +350,13 @@ def hair_to_black(img):
 
 
 def main(*paths):
-    # folhas: 1 boss, 2 herói/ninjas/casas, 3 floresta, 4 acampamento, 5 mini-chefes
+    # folhas: 1 boss, 2 herói/ninjas/casas, 3 floresta, 4 acampamento, 5 mini-chefes,
+    #         6 oni/rōnin de costas, 7 kunoichi de costas, 8 aldeões/bandido de costas, 9 floresta 2
     sheets = {i + 1: np.asarray(Image.open(p).convert('RGB')) for i, p in enumerate(paths)}
     os.makedirs(OUT, exist_ok=True)
     atlas = {}
     for name, (s, x0, y0, x1, y1, opts) in FRAMES.items():
-        if s == 3 and 'feather' not in opts and name != 'torii':
+        if s in (3, 9) and 'feather' not in opts and name != 'torii':
             opts = {**opts, 'feather': 10}
         img, solid, fixed = extract(sheets[s], x0, y0, x1, y1, opts, name.startswith(CHARACTER_PREFIXES), SHEET_BG[s])
         ax, ay = fixed or feet_anchor(solid)
@@ -356,4 +383,4 @@ def main(*paths):
 
 
 if __name__ == '__main__':
-    main(*sys.argv[1:6])
+    main(*sys.argv[1:])

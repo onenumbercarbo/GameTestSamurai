@@ -28,6 +28,11 @@ Abra `index.html` no navegador do computador ou do celular.
 
 O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência de mira o vira para o inimigo mais próximo; parado e sem inimigos por perto, ele segue o mouse.
 
+## Animação
+
+- **Poses de costas:** o oni, o rōnin de palha, a kunoichi e os bandidos usam a pose de costas ao andar ou atacar para longe da câmera (`BACK_SPRITES` em `js/actor.js`). Reféns podem estar ajoelhados de costas, e os libertados vão embora caminhando.
+- **Movimento fluido:** virada suave em vez do espelho instantâneo, transição de ~70 ms entre poses, passos sincronizados com a velocidade, leve balanço e inclinação ao correr.
+
 ## Arena do Gendō
 
 O santuário final tem clima de tempestade (`js/storm.js`): piso cerimonial de mosaico com anéis vermelhos e dourados, braseiros acesos em volta, chuva com respingos, relâmpagos e trovões, nuvens escuras e cores dessaturadas e quentes. A fase abre com um plano fechado atrás do rōnin que recua revelando a arena. Quando o Gendō cai, a tempestade passa.
@@ -109,7 +114,7 @@ js/ui.js / main.js         HUD, telas, cutscenes, diretor de câmera e game loop
 ### Regerar os sprites
 
 ```bash
-python3 tools/extract_sprites.py folha_boss.jpg folha_heroi.jpg folha_floresta.jpg folha_acampamento.jpg folha_minichefes.jpg
+python3 tools/extract_sprites.py folha_boss.jpg folha_heroi.jpg folha_floresta.jpg folha_acampamento.jpg folha_minichefes.jpg costas_oni_ronin.jpg costas_kunoichi.jpg costas_aldeoes.jpg floresta2.jpg
 ```
 
 Requer Pillow e NumPy. Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.

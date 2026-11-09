@@ -259,7 +259,7 @@ class Ninja extends Actor {
       case 'spawn': alpha = clamp((this.t - 0.15) / 0.25, 0, 1); break;
       case 'camp': name = this.campSprite || (this.pose === 'sit' ? S.hurt : S.idle); break;
       case 'alerting': name = S.windup; break;
-      case 'chase': name = Math.hypot(this.vx, this.vy) > 0.3 ? S.walk[Math.floor(this.animTime * 9) % S.walk.length] : S.idle; break;
+      case 'chase': name = Math.hypot(this.vx, this.vy) > 0.3 ? S.walk[Math.floor(this.stride * 2.4) % S.walk.length] : S.idle; break;
       case 'windup': name = S.windup; break;
       case 'aim': name = S.aim || S.windup; break;
       case 'strike': name = S.strike; break;
@@ -753,6 +753,9 @@ class Villager {
     this.x = x;
     this.y = y;
     this.post = post; // amarrado num poste?
+    this.backTurned = !post && Math.random() < 0.35; // ajoelhado de costas (mãos atadas à mostra)
+    this.wx = 0; // deslocamento ao ir embora depois de libertado
+    this.wy = 0;
     this.encounter = encounter;
     this.freed = false;
     this.freedT = 0;
@@ -793,7 +796,12 @@ class Villager {
     this.t += dt;
     if (this.freed) {
       this.freedT += dt;
-      if (this.freedT > 2.6) this.alive = false;
+      // depois de agradecer, vai embora caminhando (para longe da câmera)
+      if (this.freedT > 1.5) {
+        this.wx -= 1.6 * dt * Math.SQRT1_2;
+        this.wy -= 1.6 * dt * Math.SQRT1_2;
+      }
+      if (this.freedT > 3.6) this.alive = false;
     }
   }
 
@@ -802,18 +810,22 @@ class Villager {
       const k = this.freedT;
       if (k < 0.4) return 'villager_cut';
       if (k < 0.8) return 'villager_rise';
-      return Math.floor(k * 2) % 2 ? 'villager_thank' : 'villager_pray';
+      if (k < 1.5) return Math.floor(k * 2) % 2 ? 'villager_thank' : 'villager_pray';
+      return 'villager_back_walk';
     }
     if (this.post) return Math.floor(this.t * 1.2) % 2 ? 'villager_post2' : 'villager_post';
     // quando o jogador chega perto (e já é seguro), junta as mãos implorando
     if (this.near() && !this.locked) return 'villager_pray_kneel';
+    if (this.backTurned) return 'villager_back_kneel';
     return ['villager_kneel', 'villager_kneel2', 'villager_bow'][Math.floor(this.t * 0.9) % 3];
   }
 
   draw(ctx, cam) {
     const s = cam.scale;
-    const g = cam.worldToScreen(this.x, this.y);
-    const alpha = this.freed ? clamp(1 - (this.freedT - 1.8) / 0.8, 0, 1) : 1;
+    const walking = this.freed && this.freedT > 1.5;
+    const bob = walking ? Math.abs(Math.sin(this.freedT * 7)) * 2.5 : 0;
+    const g = cam.worldToScreen(this.x + this.wx, this.y + this.wy, bob);
+    const alpha = this.freed ? clamp(1 - (this.freedT - 2.8) / 0.8, 0, 1) : 1;
     if (alpha <= 0) return;
     const shiver = this.freed ? 0 : Math.sin(this.t * 40) * 0.6 * s; // tremendo de medo
     ctx.fillStyle = `rgba(0,0,0,${0.3 * alpha})`;

@@ -214,7 +214,7 @@ class Player extends Actor {
     if (st === 'hurt') return { name: 'hero_stance' };
     if (st === 'run') {
       const seq = ['hero_walk1', 'hero_idle', 'hero_walk2', 'hero_idle'];
-      return { name: seq[Math.floor(this.animTime * 9) % 4] };
+      return { name: seq[Math.floor(this.stride * 1.9) % 4] }; // passos acompanham a velocidade
     }
     return { name: this.world.inCombat ? 'hero_stance' : 'hero_idle' };
   }

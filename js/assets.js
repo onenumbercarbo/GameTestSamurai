@@ -47,7 +47,8 @@ const Sprites = {
     ctx.globalAlpha = alpha;
     ctx.translate(x, y);
     if (opts.rotate) ctx.rotate(opts.rotate);
-    if (opts.flip) ctx.scale(-1, 1);
+    // sx/sy: escala extra (a virada suave do personagem achata o sprite no eixo X)
+    ctx.scale((opts.flip ? -1 : 1) * (opts.sx ?? 1), opts.sy ?? 1);
     const dx = -m.ax * scale;
     const dy = -m.ay * scale;
     ctx.drawImage(img, dx, dy, m.w * scale, m.h * scale);

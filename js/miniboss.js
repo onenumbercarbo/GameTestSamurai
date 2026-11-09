@@ -512,7 +512,7 @@ class MiniBoss extends Actor {
       case 'chase': {
         const moving = Math.hypot(this.vx, this.vy) > 0.3;
         const list = moving ? S.walk : S.idle;
-        return list[Math.floor(this.animTime * (moving ? 6 : 2)) % list.length];
+        return list[Math.floor(moving ? this.stride * 1.8 : this.animTime * 2) % list.length];
       }
       case 'guard': return S.guard;
       case 'evade': return S.walk[0];
@@ -541,7 +541,7 @@ class MiniBoss extends Actor {
     const dying = this.state === 'dying';
     this.drawSprite(ctx, cam, this.currentSprite(), this.D.scale, {
       flip, tint, tintAmount: amount,
-      z: moving ? Math.abs(Math.sin(this.animTime * 10)) * 4 : 0, // passos pesados: leve pulo ao andar
+
       rotate: dying ? (flip ? -1 : 1) * clamp(this.deadT / 0.5, 0, 1) * 1.4 : 0,
       alpha: dying ? 1 - clamp((this.deadT - 0.9) / 0.5, 0, 1) : this.alpha,
     });

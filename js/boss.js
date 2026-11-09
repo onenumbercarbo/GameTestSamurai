@@ -558,7 +558,7 @@ class Boss extends Actor {
       case 'dormant': return ['boss_idle0', 'boss_idle1', 'boss_idle2'][Math.floor(this.animTime * 3) % 3];
       case 'roar': return Math.floor(t * 8) % 2 ? 'boss_roar0' : 'boss_roar1';
       case 'chase':
-        if (Math.hypot(this.vx, this.vy) > 0.3) return ['boss_walk0', 'boss_walk1', 'boss_walk2', 'boss_walk1'][Math.floor(this.animTime * 6) % 4];
+        if (Math.hypot(this.vx, this.vy) > 0.3) return ['boss_walk0', 'boss_walk1', 'boss_walk2', 'boss_walk1'][Math.floor(this.stride * 1.9) % 4];
         return ['boss_idle0', 'boss_idle1', 'boss_idle2'][Math.floor(this.animTime * 3) % 3];
       case 'guard': return 'boss_hold';
       case 'evade': return 'boss_lunge';

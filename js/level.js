@@ -55,6 +55,15 @@ const PROP_TYPES = {
   camp_log_bottles: { scale: 0.6, solid: 'circle', r: 0.4, off: -0.4 },
   camp_sake: { scale: 0.65, solid: 'circle', r: 0.3, off: -0.15 },
   camp_barrels: { scale: 0.65, solid: 'circle', r: 0.4, off: -0.3 },
+  // Floresta 2: pinheiro retorcido, cerca e barrancos de terra (relevo).
+  bonsai_pine: { scale: 0.95, solid: 'circle', r: 0.4 },
+  fence: { scale: 0.8, solid: 'box', shrink: 0.85 },
+  cliff_long: { scale: 0.95, solid: 'box', shrink: 0.85 },
+  cliff_end: { scale: 0.95, solid: 'box', shrink: 0.85 },
+  cliff_block: { scale: 0.95, solid: 'box', shrink: 0.85 },
+  slope_path: { scale: 0.95, solid: 'box', shrink: 0.85 },
+  slope_roots: { scale: 0.95, solid: 'box', shrink: 0.85 },
+  slope_roots2: { scale: 0.95, solid: 'box', shrink: 0.85 },
   // Vegetação rasteira: só decoração, não bloqueia.
   fern: { scale: 0.8, solid: 'none', r: 0.25 },
   fern2: { scale: 0.8, solid: 'none', r: 0.25 },
@@ -62,7 +71,9 @@ const PROP_TYPES = {
 };
 
 /** Tipos usados para preencher a mata além das bordas do mapa. */
-const BORDER_FAR = ['forest_mixed', 'forest_broadleaf', 'bamboo_grove', 'forest_pines', 'pine', 'forest_mixed', 'forest_sakura'];
+const BORDER_FAR = ['forest_mixed', 'forest_broadleaf', 'bamboo_grove', 'forest_pines', 'pine', 'forest_mixed', 'forest_sakura', 'bonsai_pine'];
+// Logo atrás do mapa (lados norte e oeste): barrancos e raízes, como um planalto em volta da vila.
+const BORDER_CLIFF = ['cliff_long', 'cliff_end', 'cliff_block', 'slope_roots', 'slope_roots2', 'slope_path', 'cliff_long', 'cliff_end'];
 // Na frente do mapa (lados sul/leste, mais perto da câmera) só vegetação baixa,
 // para as árvores não taparem a luta.
 const BORDER_LOW = ['bush_big', 'bush_round', 'bush_a', 'rock_moss', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'tree_small', 'bush_big'];
@@ -363,10 +374,11 @@ class Level {
       for (let gx = -B; gx < W + B; gx += 2.6) {
         const front = gx > W || gy > H;
         const nearFront = front && gx < W + 7 && gy < H + 7;
+        const nearBack = !front && (gx < 0 || gy < 0) && gx > -5 && gy > -5;
         const count = nearFront ? 3 : 1;
         for (let k = 0; k < count; k++) {
           const x = gx + rnd() * (nearFront ? 2.6 : 1.6), y = gy + rnd() * (nearFront ? 2.6 : 1.6);
-          const list = nearFront ? BORDER_LOW : BORDER_FAR;
+          const list = nearFront ? BORDER_LOW : nearBack && rnd() < 0.6 ? BORDER_CLIFF : BORDER_FAR;
           const type = list[Math.floor(rnd() * list.length)];
           const p = new Prop(type, x, y);
           const b = p.box;

@@ -226,6 +226,11 @@ const ProcGen = (() => {
         // caixas encostadas na frente da casa
         const b = boxes[boxes.length - 1];
         if (rnd() < 0.6) props.push([pick(['crate', 'crate_small', 'crate_tied']), b.x1 + 0.55, b.y0 + between(0.3, b.y1 - b.y0)]);
+        // cerca de madeira ao lado de algumas casas (quintal)
+        if (rnd() < 0.4) {
+          const fx = b.x0 - 0.7, fy = b.y1 + 0.2;
+          if (boxPathDist(path, { x0: fx - 1.2, y0: fy - 1.6, x1: fx, y1: fy }) > pw + 0.5) props.push(['fence', fx, fy]);
+        }
       }
     }
 

@@ -172,6 +172,12 @@ def extract(sheet, x0, y0, x1, y1, opts, character=False, bg=BG):
         col[..., 1] = np.minimum(col[..., 1], lim)
     for cx0, cy0, cx1, cy1 in opts.get('clip', []):
         a[max(cy0 - y0, 0):max(cy1 - y0, 0), max(cx0 - x0, 0):max(cx1 - x0, 0)] = 0
+    if opts.get('feather'):
+        # Suaviza cortes retos onde o recorte encostou num vizinho da folha.
+        h, w = a.shape
+        yy, xx = np.mgrid[0:h, 0:w]
+        edge = np.minimum(np.minimum(xx, w - 1 - xx), np.minimum(yy, h - 1 - yy))
+        a = a * np.clip(edge / opts['feather'], 0, 1)
     mask = a > 0.35
     lab, comps = label(mask)
     if not comps:
@@ -224,6 +230,22 @@ def recolor(img, gain, offset):
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
 
 
+VILLAGERS = {'villager_a': (190, 150, 100), 'villager_b': (110, 135, 185), 'villager_c': (165, 95, 80)}
+
+
+def colorize(img, tone):
+    """Tinge o sprite com um tom (mantendo luz/sombra) e preserva a pele."""
+    a = np.asarray(img).astype(float)
+    rgb, alpha = a[..., :3], a[..., 3:]
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    skin = (r > g + 12) & (g > b + 8) & (r > 120)
+    lum = (0.3 * r + 0.59 * g + 0.11 * b) / 255.0
+    lum = np.clip(lum * 1.9, 0, 1.25)
+    out = np.stack([np.clip(lum * c, 0, 255) for c in tone], -1)
+    out = np.where(skin[..., None], rgb, out)
+    return Image.fromarray(np.concatenate([out, alpha], -1).astype(np.uint8), 'RGBA')
+
+
 def main(boss_path, hero_path, forest_path):
     sheets = {1: np.asarray(Image.open(boss_path).convert('RGB')),
               2: np.asarray(Image.open(hero_path).convert('RGB')),
@@ -231,6 +253,8 @@ def main(boss_path, hero_path, forest_path):
     os.makedirs(OUT, exist_ok=True)
     atlas = {}
     for name, (s, x0, y0, x1, y1, opts) in FRAMES.items():
+        if s == 3 and 'feather' not in opts and name != 'torii':
+            opts = {**opts, 'feather': 10}
         img, solid, fixed = extract(sheets[s], x0, y0, x1, y1, opts, name.startswith(CHARACTER_PREFIXES), SHEET_BG[s])
         ax, ay = fixed or feet_anchor(solid)
         if name in ANCHOR_X:
@@ -247,6 +271,12 @@ def main(boss_path, hero_path, forest_path):
             name = src.replace('ninja_', tag + '_')
             recolor(base, gain, off).save(os.path.join(OUT, name + '.png'), optimize=True)
             atlas[name] = dict(atlas[src])
+    # Aldeões: a pose acuada do ninja (mãos para cima, agachado) recolorida
+    # com roupas de camponês. Usada para os reféns que o rōnin liberta.
+    base = Image.open(os.path.join(OUT, 'ninja_crouch.png'))
+    for name, tone in VILLAGERS.items():
+        colorize(base, tone).save(os.path.join(OUT, name + '.png'), optimize=True)
+        atlas[name] = dict(atlas['ninja_crouch'])
     with open(os.path.join(ROOT, 'js', 'atlas.js'), 'w') as f:
         f.write('/* Gerado por tools/extract_sprites.py — não editar à mão.\n'
                 ' * w/h: tamanho do PNG; ax/ay: ponto de apoio (pés) em pixels do PNG. */\n')

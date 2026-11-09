@@ -15,7 +15,7 @@ Abra `index.html` no navegador. Não precisa de build nem de servidor.
 | Dash (esquiva invulnerável, cancela ataques) | `Espaço` / `Shift` |
 | Investida (ataque logo após o dash) | Dash + clique |
 | Iaijutsu, golpe pesado (precisa do pergaminho) | Botão direito |
-| Abrir baú | `E` |
+| Abrir baú / libertar aldeão | `E` |
 | Pausa e tesouros / Som / Debug | `Esc` ou `P` / `M` / `F3` |
 
 O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência de mira o vira para o inimigo mais próximo; parado e sem inimigos por perto, ele segue o mouse.
@@ -33,6 +33,8 @@ Cada vila tem dois acampamentos nos cantos do mapa, cada um guardando um **baú*
 | Sagino | Nodachi do Vento | alcance +25%; o giro final lança ondas de vento |
 | Kurogane | Pergaminho do Iaijutsu | botão direito: saque relâmpago |
 
+Em cada vila há aldeões feitos reféns junto das emboscadas do caminho, amarrados e pedindo socorro. Derrote os bandidos e aperte **E** perto do aldeão para libertá-lo (+20 de vida). O total de aldeões salvos aparece no final.
+
 O minimapa (canto inferior direito) mostra só o que você já explorou; baús e emboscadas aparecem nele quando você chega perto. Caixas soltas quebram com a espada e às vezes guardam onigiri.
 
 ## Jornada
@@ -41,7 +43,10 @@ O minimapa (canto inferior direito) mostra só o que você já explorou; baús e
 2. **Vila de Hanamura**: vila das cerejeiras, com batedores ágeis.
 3. **Floresta de Bambu de Sagino**: assassinos que arremessam kunais, que podem ser rebatidas com a espada.
 4. **Kurogane**: o acampamento do clã.
-5. **Santuário de Kurokama**: luta contra **Gendō, o Ceifador**. Ataques telegrafados no chão (ceifada, giro 360°, salto com impacto, investida); fase 2 com fúria, onda de choque e reforços; sistema de postura.
+5. **Santuário de Kurokama**: luta contra **Gendō, o Ceifador**, em duas fases.
+   - Fase 1: ceifada, giro 360°, salto com impacto e investida, todos telegrafados no chão.
+   - Defesas: guarda frontal (arco azul) que bloqueia golpes e revida com contra-ataque. O golpe final do combo, o iaijutsu ou ataques pelas costas quebram a guarda. Postura: só cambaleia após acumular dano.
+   - Fase 2 (50% da vida): combos encadeados, três saltos seguidos com onda de choque, três investidas, foice arremessada como bumerangue (ele fica desarmado enquanto ela voa), esquiva para trás seguida de investida, guarda mais frequente e reforços.
 
 ## Câmera cinematográfica
 

@@ -82,6 +82,11 @@ const UI = {
     ctx.font = `500 12px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.65)';
     ctx.fillText(w.objectiveText(), cam.viewW / 2, top + 30);
+    const danger = (w.villagers || []).filter((v) => !v.freed).length;
+    if (danger) {
+      ctx.fillStyle = `rgba(255,190,150,${0.7 + 0.3 * Math.sin(w.time * 4)})`;
+      ctx.fillText(`Aldeões em perigo nesta vila: ${danger}`, cam.viewW / 2, top + 48);
+    }
 
     // Combo
     const st = w.stats;
@@ -201,7 +206,7 @@ const UI = {
     const lines = [
       'WASD / setas — mover      Mouse — mirar      Clique — corte (3 cliques = combo)',
       'Espaço / Shift — dash (esquiva invulnerável)      Dash + clique — investida      Botão direito — iaijutsu (item)',
-      'Explore os cantos de cada vila: bandidos acampados guardam baús com o selo do portão e armas (E abre o baú)',
+      'Explore: bandidos acampados guardam baús (selo do portão e armas) e aldeões reféns pedem socorro. E abre baús e liberta reféns',
       'Esc / P — pausa e tesouros      M — som      F3 — debug',
     ];
     ctx.font = `500 13px ${FONT_UI}`;
@@ -347,6 +352,7 @@ const UI = {
       ctx.fillRect(q.x - 3, q.y - 5, 1.5, 7);
       ctx.fillRect(q.x + 1.5, q.y - 5, 1.5, 7);
     }
+    for (const v of w.villagers || []) if (!v.freed && seen(v.x, v.y)) dot(v.x, v.y, 2.6, '#7fd0ff');
     for (const en of w.enemies) if (en.alive && en.state !== 'camp') dot(en.x, en.y, 2, '#ff5a4a');
     if (w.boss && w.boss.alive) dot(w.boss.x, w.boss.y, 3.5, '#ff2a1a');
     dot(w.player.x, w.player.y, 3, '#ffffff');
@@ -387,7 +393,7 @@ const UI = {
     const mins = Math.floor(stats.time / 60), secs = Math.floor(stats.time % 60);
     ctx.font = `600 15px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.75)';
-    ctx.fillText(`Tempo ${mins}:${String(secs).padStart(2, '0')}   ·   Inimigos derrotados ${stats.kills}   ·   Maior combo ${stats.maxCombo}`, cx, y + 20);
+    ctx.fillText(`Tempo ${mins}:${String(secs).padStart(2, '0')}   ·   Inimigos derrotados ${stats.kills}   ·   Aldeões salvos ${stats.rescued}/${stats.villagersTotal}   ·   Maior combo ${stats.maxCombo}`, cx, y + 20);
     if (t > 2) {
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 3);
       ctx.fillStyle = '#ffcf6a';

@@ -732,3 +732,146 @@ class Campfire {
     ctx.restore();
   }
 }
+
+/**
+ * Aldeão refém: amarrado, agachado e pedindo socorro perto dos bandidos.
+ * Depois que o grupo que o vigia é derrotado, o rōnin o liberta com E.
+ * Sprite: pose acuada recolorida + chapéu de palha (sugegasa) e corda desenhados.
+ */
+class Villager {
+  constructor(world, x, y, look, encounter) {
+    this.world = world;
+    this.x = x;
+    this.y = y;
+    this.look = look; // 'villager_a' | 'villager_b' | 'villager_c'
+    this.encounter = encounter;
+    this.freed = false;
+    this.freedT = 0;
+    this.t = Math.random() * 5;
+    this.alive = true;
+    this.radius = 0.3;
+    this.facing = Math.random() < 0.5 ? 0 : Math.PI / 2;
+    this.box = { x0: x - 0.3, y0: y - 0.3, x1: x + 0.3, y1: y + 0.3 };
+  }
+
+  get locked() {
+    return !!this.encounter && this.encounter.state !== 'done';
+  }
+
+  near() {
+    const p = this.world.player;
+    return p.alive && Math.hypot(p.x - this.x, p.y - this.y) < 1.4;
+  }
+
+  free() {
+    if (this.freed || this.locked) return;
+    this.freed = true;
+    this.freedT = 0;
+    const w = this.world;
+    w.stats.rescued++;
+    w.rescuedHere++;
+    w.player.heal(20);
+    w.effects.text(this.x, this.y, 'Obrigado, rōnin!', '#ffe9a8', true);
+    w.effects.sparks(this.x, this.y, -Math.PI * 0.75, 10, '#c89a5a', 2);
+    Sfx.pickup();
+    const left = w.villagers.filter((v) => !v.freed).length;
+    w.showBanner('Aldeão libertado', { sub: left ? `Ainda há ${left} em perigo nesta vila (+20 de vida)` : 'Todos os aldeões desta vila estão a salvo (+20 de vida)', dur: 2.2, y: 0.24, color: '#ffe9a8' });
+  }
+
+  update(dt) {
+    this.t += dt;
+    if (this.freed) {
+      this.freedT += dt;
+      if (this.freedT > 2.2) this.alive = false;
+    } else {
+      // Olha para o perigo mais próximo (ou para o rōnin).
+      const p = this.world.player;
+      this.facing = Math.atan2(p.y - this.y, p.x - this.x);
+    }
+  }
+
+  draw(ctx, cam) {
+    const s = cam.scale;
+    const sc = CONFIG.SPRITE_SCALE * 0.9;
+    const g = cam.worldToScreen(this.x, this.y);
+    const flip = Math.cos(this.facing) - Math.sin(this.facing) < 0;
+    const alpha = this.freed ? clamp(1 - (this.freedT - 1.4) / 0.8, 0, 1) : 1;
+    if (alpha <= 0) return;
+    // tremendo de medo enquanto preso
+    const shiver = this.freed ? 0 : Math.sin(this.t * 40) * 0.8 * s;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(g.x, g.y, Iso.HW * 0.45 * s, Iso.HH * 0.45 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    Sprites.draw(ctx, this.look, g.x + shiver, g.y, sc * s, { flip, alpha });
+    const m = ATLAS[this.look];
+    const k = sc * s;
+    const dir = flip ? -1 : 1;
+    const hx = g.x + shiver + (30 - m.ax) * k * dir;
+    const hy = g.y + (16 - m.ay) * k;
+    // chapéu de palha cônico
+    ctx.fillStyle = '#c9a45c';
+    ctx.strokeStyle = '#5a4020';
+    ctx.lineWidth = 1.2 * s;
+    ctx.beginPath();
+    ctx.moveTo(hx - 26 * k, hy + 4 * k);
+    ctx.lineTo(hx, hy - 13 * k);
+    ctx.lineTo(hx + 26 * k, hy + 4 * k);
+    ctx.quadraticCurveTo(hx, hy + 10 * k, hx - 26 * k, hy + 4 * k);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(90,64,32,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(hx, hy - 13 * k); ctx.lineTo(hx - 10 * k, hy + 6 * k);
+    ctx.moveTo(hx, hy - 13 * k); ctx.lineTo(hx + 10 * k, hy + 6 * k);
+    ctx.stroke();
+    if (!this.freed) {
+      // corda amarrando o corpo
+      ctx.strokeStyle = '#a8814a';
+      ctx.lineWidth = 2.2 * s;
+      const by = g.y - 52 * k;
+      ctx.beginPath();
+      ctx.moveTo(g.x - 18 * k, by - 6 * k); ctx.lineTo(g.x + 18 * k, by + 4 * k);
+      ctx.moveTo(g.x - 18 * k, by + 8 * k); ctx.lineTo(g.x + 18 * k, by + 16 * k);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // balão: pedido de socorro / instrução
+    const p = this.world.player;
+    const d = Math.hypot(p.x - this.x, p.y - this.y);
+    let msg = null, color = '#ffffff';
+    if (this.freed) {
+      msg = null;
+    } else if (this.near()) {
+      msg = this.locked ? 'Cuidado! Os bandidos ainda estão aqui!' : 'E — libertar o aldeão';
+      color = this.locked ? '#ff9a80' : '#ffcf6a';
+    } else if (d < 9 && Math.floor(this.t * 1.5) % 3 !== 2) {
+      msg = 'Socorro!';
+    }
+    if (msg) {
+      const t = cam.worldToScreen(this.x, this.y, 88);
+      ctx.save();
+      ctx.font = `700 ${Math.round(13 * Math.min(s, 1.4))}px ${FONT_UI}`;
+      ctx.textAlign = 'center';
+      const wd = ctx.measureText(msg).width + 16;
+      ctx.fillStyle = 'rgba(250,244,230,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(t.x - wd / 2, t.y - 16);
+      ctx.lineTo(t.x + wd / 2, t.y - 16);
+      ctx.lineTo(t.x + wd / 2, t.y + 6);
+      ctx.lineTo(t.x + 6, t.y + 6);
+      ctx.lineTo(t.x, t.y + 13);
+      ctx.lineTo(t.x - 4, t.y + 6);
+      ctx.lineTo(t.x - wd / 2, t.y + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = color === '#ffffff' ? '#7a1d16' : color === '#ffcf6a' ? '#6b4a10' : '#8a2a1c';
+      ctx.fillText(msg, t.x, t.y);
+      ctx.restore();
+    }
+  }
+}

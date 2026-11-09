@@ -153,7 +153,7 @@ class Cutscene {
     ambient: [],
   };
 
-  const newStats = () => ({ kills: 0, time: 0, maxCombo: 0, combo: 0, comboTimer: 0 });
+  const newStats = () => ({ kills: 0, time: 0, maxCombo: 0, combo: 0, comboTimer: 0, rescued: 0, villagersTotal: 0 });
 
   /* ------------------------------ criação do mundo ------------------------------ */
 
@@ -213,6 +213,17 @@ class Cutscene {
       w.chests.push(chest);
     }
     placeCamps(w, index);
+
+    // Aldeões em perigo: um refém junto de cada emboscada do caminho.
+    w.villagers = [];
+    const looks = ['villager_a', 'villager_b', 'villager_c'];
+    w.encounters.filter((e) => !e.guard).forEach((enc, i) => {
+      const q = w.level.randomFreeNear(enc.center[0], enc.center[1], 0.6, 1.8);
+      w.villagers.push(new Villager(w, q.x, q.y, looks[i % looks.length], enc));
+    });
+    w.villagersStart = w.villagers.length;
+    w.rescuedHere = 0;
+    game.stats.villagersTotal = (game.stats.villagersTotal || 0) + w.villagers.length;
 
     // Névoa do mapa: tiles já vistos (para o minimapa).
     w.explored = new Uint8Array(stage.size[0] * stage.size[1]);
@@ -293,7 +304,7 @@ class Cutscene {
       w.spawnQueue = [];
       Sfx.roar();
       w.cutscene = new Cutscene([
-        { x: () => b.x, y: () => b.y, zoom: 2.2, rate: 2.5, dur: 2.6 },
+        { x: () => b.x, y: () => b.y, zoom: 2.5, rate: 2.5, dur: 2.6 },
         {
           x: stage.boss.relic[0], y: stage.boss.relic[1], zoom: 1.7, rate: 2, dur: 1.8,
           onStart: () => {
@@ -312,7 +323,7 @@ class Cutscene {
       Sfx.gong();
       w.effects.ring(w.player.x, w.player.y, 4, 1.5, '255,220,140');
       w.cutscene = new Cutscene([
-        { x: () => w.player.x, y: () => w.player.y, zoom: 2.3, rate: 2, dur: 3 },
+        { x: () => w.player.x, y: () => w.player.y, zoom: 2.7, rate: 2, dur: 3 },
       ], () => toVictory());
       w.showBanner('Relíquia recuperada!', { color: '#ffcf6a', dur: 2.8 });
     };
@@ -411,7 +422,7 @@ class Cutscene {
       const d = Math.hypot(b.x - p.x, b.y - p.y);
       fx = p.x * 0.6 + b.x * 0.4;
       fy = p.y * 0.6 + b.y * 0.4;
-      zoom = clamp(1.8 - d * 0.085, 1.15, 1.6);
+      zoom = clamp(2.2 - d * 0.09, 1.45, 2.0);
       rate = 3;
       lb = 0.35;
     } else if (w.activeArena) {
@@ -469,11 +480,13 @@ class Cutscene {
       if (next) w.activeArena = { center: next.center, r: next.r, enc: next };
     }
 
-    // Abrir baús com E.
+    // Interagir com E: abrir baús e libertar aldeões.
     if (input.wasPressed('KeyE', 'KeyF')) {
       const c = w.chests.find((ch) => !ch.opened && ch.near());
+      const v = w.villagers.find((vl) => !vl.freed && vl.near());
       if (c && !c.locked) c.open();
-      else if (c) Sfx.clang();
+      else if (v && !v.locked) v.free();
+      else if (c || v) Sfx.clang();
     }
 
     // O portão abre quando as emboscadas do caminho caíram e o selo foi achado.
@@ -497,11 +510,11 @@ class Cutscene {
         const b = w.boss;
         w.cutscene = new Cutscene([
           {
-            x: () => b.x, y: () => b.y, zoom: 2.0, rate: 2.2, dur: 1.4,
+            x: () => b.x, y: () => b.y, zoom: 2.4, rate: 2.2, dur: 1.4,
             onStart: () => w.showBanner('Gendō', { kanji: '黒鎌の玄道', sub: 'O Ceifador de Kurokama — líder do clã', dur: 3.4, y: 0.26 }),
           },
-          { x: () => b.x, y: () => b.y, zoom: 2.3, rate: 3, dur: 1.7, onStart: () => b.awaken() },
-          { x: () => (b.x + p.x) / 2, y: () => (b.y + p.y) / 2, zoom: 1.45, rate: 3, dur: 0.5 },
+          { x: () => b.x, y: () => b.y, zoom: 2.7, rate: 3, dur: 1.7, onStart: () => b.awaken() },
+          { x: () => (b.x + p.x) / 2, y: () => (b.y + p.y) / 2, zoom: 1.8, rate: 3, dur: 0.5 },
         ], () => { w.bossFight = true; });
       }
     }
@@ -547,6 +560,8 @@ class Cutscene {
     w.pickups = w.pickups.filter((pk) => pk.alive);
     if (w.gate) w.gate.t += dt;
     for (const c of w.chests) c.update(dt);
+    for (const v of w.villagers) v.update(dt);
+    w.villagers = w.villagers.filter((v) => v.alive);
     for (const f of w.campfires) f.update(dt);
 
     // Separação entre corpos.
@@ -610,7 +625,7 @@ class Cutscene {
 
   function renderWorld(w) {
     const cam = camera;
-    ctx.fillStyle = '#0e0b09';
+    ctx.fillStyle = 'hsl(95, 30%, 9%)';
     ctx.fillRect(0, 0, cam.viewW, cam.viewH);
     w.level.drawGround(ctx, cam, w.time);
 
@@ -638,7 +653,7 @@ class Cutscene {
       if (b.x1 < 0 || b.x0 > cam.viewW || b.y1 < 0 || b.y0 > cam.viewH) continue;
       list.push(pr);
     }
-    list.push(w.player, ...w.enemies, ...w.pickups, ...w.projectiles, ...w.chests, ...w.campfires);
+    list.push(w.player, ...w.enemies, ...w.pickups, ...w.projectiles, ...w.chests, ...w.campfires, ...w.villagers);
     if (w.boss) list.push(w.boss);
     if (w.gate) list.push(w.gate);
     const sorted = depthSort(list);
@@ -893,6 +908,8 @@ class Cutscene {
         if (game.t > 1 && input.consumeConfirm()) {
           game.state = 'transition';
           fadeTo(() => {
+            game.stats.villagersTotal -= game.world.villagersStart || 0;
+            game.stats.rescued -= game.world.rescuedHere || 0;
             game.world = createWorld(game.stageIndex, CONFIG.PLAYER.maxHp);
             game.world.cutscene = null;
             camera.letterbox = 0;

@@ -474,61 +474,136 @@ class Level {
 
   /* ----------------------------------- chão ----------------------------------- */
 
-  drawGround(ctx, cam, time) {
+  /**
+   * Pinta o chão da fase UMA vez num canvas próprio (sem grade de losangos).
+   * O truque: setTransform com a matriz isométrica — assim desenhamos em
+   * coordenadas de MUNDO (retângulos, círculos, traços) e o canvas projeta
+   * tudo em perspectiva sozinho. Desfoque (filter: blur) suaviza as bordas.
+   */
+  buildGround() {
+    const W = this.W, H = this.H, HW = Iso.HW, HH = Iso.HH, B = BORDER + 2;
     const st = this.style;
-    const s = cam.scale;
-    // Culling: só os tiles cujo topo está na tela (com margem).
-    const m = Iso.HW * 2 * s;
-    const B = BORDER + 2;
+    const ox = (H + 2 * B) * HW, oy = 2 * B * HH;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil((W + H + 4 * B) * HW);
+    c.height = Math.ceil((W + H + 4 * B) * HH);
+    const g = c.getContext('2d');
+    const hsl = (h, sat, l, a = 1) => `hsla(${h}, ${sat}%, ${l}%, ${a})`;
+    const rnd = makeRng(W * 131 + H * 7 + (this.stage.scatter ? this.stage.scatter.seed : 3));
+
+    g.fillStyle = hsl(95, 30, 9);
+    g.fillRect(0, 0, c.width, c.height);
+    g.setTransform(HW, HH, -HW, HH, ox, oy); // daqui em diante: unidades de MUNDO
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+
+    // Mata ao redor: claridade diminuindo para longe do mapa.
+    g.filter = 'blur(24px)';
+    g.fillStyle = hsl(92, 30, 16);
+    g.fillRect(-5, -5, W + 10, H + 10);
+    g.filter = 'blur(12px)';
+    g.fillStyle = hsl(92, 30, 20);
+    g.fillRect(-1.5, -1.5, W + 3, H + 3);
+    // Base do mapa com borda macia.
+    g.filter = 'blur(8px)';
+    g.fillStyle = hsl(st.base[0], st.base[1], st.base[2]);
+    g.fillRect(-0.2, -0.2, W + 0.4, H + 0.4);
+    g.filter = 'none';
+
+    // Manchas de cor (variação orgânica do capim/terra).
+    for (let k = 0; k < 170; k++) {
+      const x = rnd() * W, y = rnd() * H, r = 1.2 + rnd() * 3.5;
+      const dl = (rnd() - 0.5) * 12, dh = (rnd() - 0.5) * 18;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, hsl(st.base[0] + dh, st.base[1] + 4, st.base[2] + dl, 0.35));
+      gr.addColorStop(1, hsl(st.base[0] + dh, st.base[1] + 4, st.base[2] + dl, 0));
+      g.fillStyle = gr;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+
+    // Caminho de terra: sombra desfocada + leito + faixa gasta no meio.
+    const pw = (this.stage.pathWidth || 1.3) * 2;
+    const path = () => {
+      g.beginPath();
+      this.stage.path.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    };
+    const P = st.path;
+    g.filter = 'blur(6px)';
+    path(); g.strokeStyle = hsl(P[0], P[1], P[2] - 6, 0.6); g.lineWidth = pw + 0.9; g.stroke();
+    g.filter = 'blur(2px)';
+    path(); g.strokeStyle = hsl(P[0], P[1], P[2]); g.lineWidth = pw; g.stroke();
+    g.filter = 'blur(5px)';
+    path(); g.strokeStyle = hsl(P[0], P[1] - 4, P[2] + 6, 0.5); g.lineWidth = pw * 0.4; g.stroke();
+    g.filter = 'none';
+    // pedrinhas e marcas de roda ao longo do caminho
+    const pts = this.stage.path;
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [ax, ay] = pts[k], [bx, by] = pts[k + 1];
+      const len = Math.hypot(bx - ax, by - ay);
+      for (let q = 0; q < len * 4; q++) {
+        const t = rnd(), off = (rnd() - 0.5) * pw * 0.9;
+        const nx = -(by - ay) / len, ny = (bx - ax) / len;
+        const x = ax + (bx - ax) * t + nx * off, y = ay + (by - ay) * t + ny * off;
+        g.fillStyle = hsl(P[0], 10, P[2] - 10 + rnd() * 18, 0.7);
+        g.beginPath();
+        g.arc(x, y, 0.03 + rnd() * 0.05, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+
+    // Praças: lajes de pedra assentadas em fiadas desencontradas.
+    const S = st.stone;
+    for (const [cx, cy, r] of this.stage.plazas || []) {
+      g.filter = 'blur(5px)';
+      g.fillStyle = hsl(S[0], S[1], S[2] - 12, 0.7);
+      g.beginPath(); g.arc(cx, cy, r + 0.3, 0, Math.PI * 2); g.fill();
+      g.filter = 'none';
+      g.save();
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.clip();
+      g.fillStyle = hsl(S[0], S[1], S[2] - 14);
+      g.fillRect(cx - r, cy - r, r * 2, r * 2);
+      for (let y = cy - r, row = 0; y < cy + r; y += 0.72, row++) {
+        for (let x = cx - r - (row % 2) * 0.5; x < cx + r; x += 1.0) {
+          g.fillStyle = hsl(S[0] + (rnd() - 0.5) * 8, S[1], S[2] - 4 + rnd() * 9);
+          g.fillRect(x + 0.04, y + 0.04, 0.92, 0.64);
+        }
+      }
+      g.restore();
+      // musgo nas bordas
+      g.filter = 'blur(4px)';
+      g.strokeStyle = hsl(st.base[0], st.base[1], st.base[2] + 2, 0.55);
+      g.lineWidth = 0.35;
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+      g.filter = 'none';
+    }
+
+    this.groundCanvas = c;
+    this.gOx = ox;
+    this.gOy = oy;
+  }
+
+  drawGround(ctx, cam, time) {
+    if (!this.groundCanvas) this.buildGround();
+    const c = this.groundCanvas, s = cam.scale;
+    const p0 = cam.worldToScreen(0, 0);
+    const dx = p0.x - this.gOx * s, dy = p0.y - this.gOy * s;
+    // Desenha só o pedaço visível do canvas do chão.
+    const sx0 = Math.max(0, -dx / s), sy0 = Math.max(0, -dy / s);
+    const sx1 = Math.min(c.width, (cam.viewW - dx) / s), sy1 = Math.min(c.height, (cam.viewH - dy) / s);
+    if (sx1 > sx0 && sy1 > sy0) {
+      ctx.drawImage(c, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 * s, dy + sy0 * s, (sx1 - sx0) * s, (sy1 - sy0) * s);
+    }
+    // Detalhes animados (capim balançando, pétalas) por cima, só nos tiles visíveis.
+    const m = Iso.HW * 2 * s, B = 4;
     for (let j = -B; j < this.H + B; j++) {
       for (let i = -B; i < this.W + B; i++) {
+        const n = hash2(i, j);
+        if (n <= 0.55) continue;
         const top = cam.worldToScreen(i, j);
         if (top.x < -m || top.x > cam.viewW + m || top.y < -m || top.y > cam.viewH + m) continue;
-        const right = cam.worldToScreen(i + 1, j);
-        const bottom = cam.worldToScreen(i + 1, j + 1);
-        const left = cam.worldToScreen(i, j + 1);
-        const n = hash2(i, j);
         const outside = i < 0 || j < 0 || i >= this.W || j >= this.H;
-        if (outside) {
-          // Chão de mata: mais escuro quanto mais longe do mapa.
-          const far = Math.max(-i, -j, i - this.W + 1, j - this.H + 1);
-          const l = Math.max(10, 24 - far * 1.1 + n * 4);
-          ctx.fillStyle = `hsl(${92 + (n - 0.5) * 14}, 30%, ${l}%)`;
-          ctx.beginPath();
-          ctx.moveTo(top.x, top.y);
-          ctx.lineTo(right.x, right.y);
-          ctx.lineTo(bottom.x, bottom.y);
-          ctx.lineTo(left.x, left.y);
-          ctx.closePath();
-          ctx.fill();
-          if (n > 0.6 && far < 4) this.drawDeco(ctx, cam, i, j, n, 'leaves', time);
-          continue;
-        }
-        const t = this.tiles[j * this.W + i];
-        const hsl = t === T_PATH ? st.path : t === T_STONE ? st.stone : st.base;
-        const l = hsl[2] - 4 + n * 7 + ((i + j) % 2 ? 0 : 2);
-        ctx.fillStyle = `hsl(${hsl[0] + (n - 0.5) * 10}, ${hsl[1]}%, ${l}%)`;
-        ctx.beginPath();
-        ctx.moveTo(top.x, top.y);
-        ctx.lineTo(right.x, right.y);
-        ctx.lineTo(bottom.x, bottom.y);
-        ctx.lineTo(left.x, left.y);
-        ctx.closePath();
-        ctx.fill();
-        if (t === T_STONE) {
-          ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-        // Decoração procedural barata (tufos, pétalas, folhas, cinzas).
-        if (t === T_GRASS && n > 0.55) this.drawDeco(ctx, cam, i, j, n, st.deco, time);
-        if (t === T_PATH && n < 0.18) {
-          const c = cam.worldToScreen(i + 0.3 + n * 2, j + 0.6);
-          ctx.fillStyle = 'rgba(60,45,30,0.5)';
-          ctx.beginPath();
-          ctx.ellipse(c.x, c.y, 2.5 * s, 1.3 * s, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        if (outside) { if (n > 0.7) this.drawDeco(ctx, cam, i, j, n, 'leaves', time); continue; }
+        if (this.tiles[j * this.W + i] === T_GRASS) this.drawDeco(ctx, cam, i, j, n, this.style.deco, time);
       }
     }
   }

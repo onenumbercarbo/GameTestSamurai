@@ -32,11 +32,11 @@ const CONFIG = {
 
   // Câmera cinematográfica: perto do jogador, com planos pré-definidos.
   CAMERA: {
-    exploreZoom: 1.75,   // plano fechado durante a exploração
-    lookAhead: 0.9,      // tiles de antecipação na direção da mira
-    arenaZoom: 1.4,      // plano fixo de arena durante as ondas
+    exploreZoom: 2.15,   // plano fechado durante a exploração
+    lookAhead: 0.7,      // tiles de antecipação na direção da mira
+    arenaZoom: 1.75,      // plano fixo de arena durante as ondas
     arenaLean: 0.22,
-    safeArea: 0.34,      // o jogador nunca sai desta fração da tela (a partir do centro)
+    safeArea: 0.3,      // o jogador nunca sai desta fração da tela (a partir do centro)
   },
 
   INPUT_BUFFER: 0.28,

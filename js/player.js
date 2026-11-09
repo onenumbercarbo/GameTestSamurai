@@ -47,7 +47,8 @@ class Player extends Actor {
    */
   attackAim() {
     const moving = this.moveDir.x || this.moveDir.y;
-    const base = moving ? Math.atan2(this.moveDir.y, this.moveDir.x) : this.aimAngle;
+    const useMouse = this.input && this.input.mouseActive && !TOUCH.active;
+    const base = moving ? Math.atan2(this.moveDir.y, this.moveDir.x) : useMouse ? this.aimAngle : this.facing;
     let best = null, bestScore = Infinity;
     for (const e of this.world.targets()) {
       if (e.isProjectile || e.isCrate) continue;
@@ -130,8 +131,17 @@ class Player extends Actor {
 
     // Input de TELA (WASD) convertido em direção no MUNDO.
     const locked = !!w.cutscene;
-    const sx = locked ? 0 : (input.isDown('KeyD', 'ArrowRight') ? 1 : 0) - (input.isDown('KeyA', 'ArrowLeft') ? 1 : 0);
-    const sy = locked ? 0 : (input.isDown('KeyS', 'ArrowDown') ? 1 : 0) - (input.isDown('KeyW', 'ArrowUp') ? 1 : 0);
+    this.input = input;
+    let sx = locked ? 0 : (input.isDown('KeyD', 'ArrowRight') ? 1 : 0) - (input.isDown('KeyA', 'ArrowLeft') ? 1 : 0);
+    let sy = locked ? 0 : (input.isDown('KeyS', 'ArrowDown') ? 1 : 0) - (input.isDown('KeyW', 'ArrowUp') ? 1 : 0);
+    let mag = 1;
+    // Joystick virtual (celular): direção analógica em espaço de tela.
+    const st = !locked && input.stickVec();
+    if (st && st.mag > 0) {
+      sx = st.x;
+      sy = st.y;
+      mag = 0.35 + 0.65 * st.mag;
+    }
     const move = Iso.screenDirToWorld(sx, sy);
     this.moveDir = move;
     this.heavyCd = Math.max(0, this.heavyCd - dt);
@@ -175,12 +185,12 @@ class Player extends Actor {
       }
     } else {
       const mul = this.combo.attacking ? this.combo.current.def.moveMul : this.hurtTime > 0 ? 0.3 : 1;
-      this.vx = damp(this.vx, move.x * P.speed * mul, P.accel, dt);
-      this.vy = damp(this.vy, move.y * P.speed * mul, P.accel, dt);
+      this.vx = damp(this.vx, move.x * P.speed * mul * mag, P.accel, dt);
+      this.vy = damp(this.vy, move.y * P.speed * mul * mag, P.accel, dt);
       if (!this.combo.attacking) {
         // Corre olhando para onde anda; parado, só segue o mouse se ele estiver em uso.
         if (move.x || move.y) this.facing = Math.atan2(move.y, move.x);
-        else if (input.mouseActive) this.facing = this.aimAngle;
+        else if (input.mouseActive && !TOUCH.active) this.facing = this.aimAngle;
       }
     }
 

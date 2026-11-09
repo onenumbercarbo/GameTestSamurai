@@ -5,7 +5,15 @@ Um rōnin atravessa cinco locais para recuperar o Espelho da Lua, roubado pelo c
 
 ## Como jogar
 
-Abra `index.html` no navegador. Não precisa de build nem de servidor.
+Abra `index.html` no navegador do computador ou do celular.
+
+**No celular** (de preferência na horizontal):
+- **Mover:** arraste o polegar na metade esquerda da tela; o joystick aparece onde você tocar.
+- **Botões:** CORTE (segure para combo contínuo), DASH, AGIR (aparece perto de baús e reféns), IAI (com o pergaminho) e pausa.
+- **Menus:** na tela de título, *Tela cheia* trava a orientação na horizontal (Android). No iPhone, use Compartilhar → *Adicionar à Tela de Início* para jogar em tela cheia como app.
+- **Na vertical:** o jogo pausa e pede para girar o aparelho.
+
+## Teclado e mouse
 
 | Ação | Controle |
 |---|---|

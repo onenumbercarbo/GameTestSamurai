@@ -838,8 +838,10 @@ class Cutscene {
   /* ---------------------------------- resize / HiDPI ---------------------------------- */
 
   function resize() {
-    const dpr = window.devicePixelRatio || 1;
+    // Celulares têm DPR 3+: limitar a resolução interna mantém 60 FPS.
+    const dpr = Math.min(window.devicePixelRatio || 1, TOUCH.active || 'ontouchstart' in window ? 1.75 : 2);
     const w = window.innerWidth, h = window.innerHeight;
+    input.viewW = w;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -847,7 +849,18 @@ class Cutscene {
     camera.resize(w, h);
   }
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 150));
   resize();
+
+  /** Tela cheia + travar na horizontal (Android; no iOS só funciona como app na tela inicial). */
+  function goFullscreen() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    Promise.resolve(req.call(el)).then(() => {
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    }).catch(() => {});
+  }
 
   /* ------------------------------------ game loop ------------------------------------ */
   /**
@@ -865,6 +878,10 @@ class Cutscene {
     game.t += realDt;
 
     if (input.wasPressed('F3')) game.debug = !game.debug;
+    // Em jogo os toques viram joystick/botões; em menus e cutscenes, "confirmar".
+    input.mode = game.state === 'play' && !(game.world && game.world.cutscene) ? 'play' : 'menu';
+    input.updateTouch(realDt);
+    const portrait = TOUCH.active && camera.viewH > camera.viewW * 1.05;
     if (input.wasPressed('KeyM')) Sfx.toggleMute();
 
     const w = game.world;
@@ -888,8 +905,11 @@ class Cutscene {
         UI.vignette(ctx, camera, 0);
         UI.letterbox(ctx, camera);
         UI.title(ctx, camera, game.t, game.save.stage);
-        if (input.wasPressed('KeyC') && game.save.stage > 0) { input.flush(); newGame(game.save.stage, game.save.items); }
-        else if (input.consumeConfirm()) newGame(0);
+        const hit = (id) => UI.titleButtons.find((b) => b.id === id && input.tapIn(b));
+        if (hit('fullscreen')) { input.flush(); goFullscreen(); }
+        else if ((input.wasPressed('KeyC') || hit('continue')) && game.save.stage > 0) { input.flush(); newGame(game.save.stage, game.save.items); }
+        else if (input.wasPressed('Enter', 'NumpadEnter', 'Space') || hit('new')) { input.flush(); newGame(0); }
+        else if (input.clicked) input.flush();
         break;
       }
 
@@ -915,7 +935,7 @@ class Cutscene {
           game.state = 'paused';
           break;
         }
-        let dt = realDt * w.timeScale;
+        let dt = portrait ? 0 : realDt * w.timeScale; // na vertical o jogo pausa
         if (w.hitStop > 0) {
           w.hitStop -= realDt;
           dt = 0;
@@ -930,6 +950,8 @@ class Cutscene {
         UI.hud(ctx, w);
         UI.minimap(ctx, w);
         UI.banner(ctx, w);
+        input.buttons = TOUCH.active && !w.cutscene ? UI.touchLayout(w) : [];
+        UI.touchControls(ctx, w, input);
         break;
       }
 
@@ -938,7 +960,7 @@ class Cutscene {
         UI.letterbox(ctx, camera);
         UI.hud(ctx, w);
         UI.pause(ctx, camera, game.items);
-        if (input.wasPressed('Escape', 'KeyP')) { game.state = 'play'; input.flush(); }
+        if (input.wasPressed('Escape', 'KeyP') || (TOUCH.active && input.clicked)) { game.state = 'play'; input.flush(); }
         break;
 
       case 'gameover':
@@ -998,6 +1020,7 @@ class Cutscene {
       ctx.fillStyle = `rgba(0,0,0,${game.fade})`;
       ctx.fillRect(0, 0, camera.viewW, camera.viewH);
     }
+    if (portrait && game.state !== 'loading') UI.rotateHint(ctx, camera);
 
     if (simulated) input.endFrame();
     requestAnimationFrame(frame);

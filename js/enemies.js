@@ -664,7 +664,7 @@ class Chest {
       ctx.save();
       ctx.textAlign = 'center';
       ctx.font = `700 ${Math.round(13 * Math.min(s, 1.4))}px ${FONT_UI}`;
-      const msg = this.locked ? 'Trancado: derrote os bandidos do acampamento' : 'E — abrir o baú';
+      const msg = this.locked ? 'Trancado: derrote os bandidos do acampamento' : (TOUCH.active ? 'AGIR — abrir o baú' : 'E — abrir o baú');
       const w = ctx.measureText(msg).width + 14;
       ctx.fillStyle = 'rgba(10,7,6,0.75)';
       ctx.fillRect(t.x - w / 2, t.y - 15, w, 22);
@@ -802,7 +802,7 @@ class Villager {
     if (this.freed) {
       msg = null;
     } else if (this.near()) {
-      msg = this.locked ? 'Cuidado! Os bandidos ainda estão aqui!' : 'E — cortar as cordas';
+      msg = this.locked ? 'Cuidado! Os bandidos ainda estão aqui!' : (TOUCH.active ? 'AGIR — cortar as cordas' : 'E — cortar as cordas');
       color = this.locked ? '#8a2a1c' : '#6b4a10';
     } else if (d < 9 && Math.floor(this.t * 1.5) % 3 !== 2) {
       msg = 'Socorro!';

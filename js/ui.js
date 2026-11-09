@@ -95,17 +95,18 @@ const UI = {
       ctx.globalAlpha = clamp(st.comboTimer / 0.4, 0, 1);
       ctx.font = `800 34px ${FONT_TITLE}`;
       ctx.fillStyle = '#ff6a50';
-      ctx.fillText(`${st.combo}`, cam.viewW - 76, top + 30);
+      const cxr = TOUCH.active ? cam.viewW - 170 : cam.viewW - 24;
+      ctx.fillText(`${st.combo}`, cxr - 52, top + 30);
       ctx.font = `700 14px ${FONT_UI}`;
       ctx.fillStyle = '#f3e9d8';
-      ctx.fillText('HITS', cam.viewW - 24, top + 28);
+      ctx.fillText('HITS', cxr, top + 28);
       ctx.globalAlpha = 1;
     }
 
     // Barra do boss
     const b = w.boss;
     if (b && w.bossFight && b.alive) {
-      const bw = Math.min(560, cam.viewW - 80);
+      const bw = Math.min(560, cam.viewW - (TOUCH.active ? 380 : 80));
       const x = (cam.viewW - bw) / 2, y = cam.viewH - 46 - cam.viewH * 0.1 * cam.letterbox;
       ctx.textAlign = 'center';
       ctx.font = `700 15px ${FONT_TITLE}`;
@@ -178,61 +179,180 @@ const UI = {
     ctx.fillRect(0, 0, cam.viewW, cam.viewH);
   },
 
+  /** "Clique ou Enter" no computador, "Toque" no celular. */
+  tapWord() {
+    return TOUCH.active ? 'Toque' : 'Clique ou Enter';
+  },
+
+  /** Botão retangular de menu (funciona com mouse e toque). */
+  menuButton(ctx, r, label, primary, t) {
+    ctx.save();
+    ctx.fillStyle = primary ? `rgba(200,50,43,${0.85 + 0.1 * Math.sin(t * 3)})` : 'rgba(20,14,10,0.75)';
+    ctx.strokeStyle = primary ? '#ffcf6a' : 'rgba(243,233,216,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(r.x, r.y, r.w, r.h, 6) : ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#f3e9d8';
+    ctx.font = `700 ${Math.round(r.h * 0.38)}px ${FONT_UI}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 1);
+    ctx.restore();
+  },
+
   title(ctx, cam, t, save) {
     this.panel(ctx, cam, 0.55);
     const cx = cam.viewW / 2;
-    const s = clamp(cam.viewW / 1100, 0.6, 1.2);
+    const s = clamp(Math.min(cam.viewW / 1100, cam.viewH / 700), 0.45, 1.2);
+    const top = cam.viewH * (cam.viewH < 500 ? 0.2 : 0.27);
     ctx.textAlign = 'center';
     ctx.font = `700 ${Math.round(120 * s)}px ${FONT_TITLE}`;
     ctx.fillStyle = 'rgba(200,50,43,0.9)';
-    ctx.fillText('浪人', cx, cam.viewH * 0.3);
+    ctx.fillText('浪人', cx, top + 40 * s);
     ctx.font = `700 ${Math.round(54 * s)}px ${FONT_TITLE}`;
     ctx.fillStyle = '#f3e9d8';
-    ctx.fillText('RŌNIN', cx, cam.viewH * 0.3 + 66 * s);
+    ctx.fillText('RŌNIN', cx, top + 106 * s);
     ctx.font = `400 ${Math.round(22 * s)}px ${FONT_TITLE}`;
     ctx.fillStyle = 'rgba(243,233,216,0.8)';
-    ctx.fillText('A Relíquia Roubada', cx, cam.viewH * 0.3 + 100 * s);
+    ctx.fillText('A Relíquia Roubada', cx, top + 140 * s);
 
-    ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 3);
-    ctx.font = `700 18px ${FONT_UI}`;
-    ctx.fillStyle = '#ffcf6a';
-    ctx.fillText('Clique ou Enter para começar', cx, cam.viewH * 0.62);
-    ctx.globalAlpha = 1;
-    if (save > 0) {
-      ctx.font = `600 14px ${FONT_UI}`;
-      ctx.fillStyle = 'rgba(243,233,216,0.85)';
-      ctx.fillText(`C — continuar de: ${STAGES[save].name}`, cx, cam.viewH * 0.62 + 28);
-    }
-    const lines = [
-      'WASD / setas — mover      Mouse — mirar      Clique — corte (3 cliques = combo)',
-      'Espaço / Shift — dash (esquiva invulnerável)      Dash + clique — investida      Botão direito — iaijutsu (item)',
-      'Explore: bandidos acampados guardam baús (selo do portão e armas) e aldeões reféns pedem socorro. E abre baús e liberta reféns',
-      'Esc / P — pausa e tesouros      M — som      F3 — debug',
-    ];
-    ctx.font = `500 13px ${FONT_UI}`;
+    // Botões (mouse ou toque).
+    const bw = Math.min(260, cam.viewW * 0.42), bh = Math.max(40, 46 * s);
+    const by = top + 170 * s;
+    const buttons = [{ id: 'new', label: 'Novo jogo', primary: true }];
+    if (save > 0) buttons.push({ id: 'continue', label: `Continuar: ${STAGES[save].name}` });
+    if (TOUCH.active && document.fullscreenEnabled) buttons.push({ id: 'fullscreen', label: 'Tela cheia' });
+    const horizontal = cam.viewH < 520;
+    this.titleButtons = buttons.map((b, i) => {
+      const r = horizontal
+        ? { x: cx - (buttons.length * (bw + 12) - 12) / 2 + i * (bw + 12), y: by, w: bw, h: bh }
+        : { x: cx - bw / 2, y: by + i * (bh + 12), w: bw, h: bh };
+      this.menuButton(ctx, r, b.label, b.primary, t);
+      return { ...r, id: b.id };
+    });
+
+    const lines = TOUCH.active
+      ? ['Joystick: arraste o polegar na metade esquerda da tela', 'CORTE (segure para combo) · DASH (esquiva) · AGIR (baús e reféns) · IAI (com o pergaminho)']
+      : ['WASD / setas — mover      Mouse — mirar      Clique — corte (3 cliques = combo)',
+        'Espaço / Shift — dash      Dash + clique — investida      Botão direito — iaijutsu (item)      E — baús e reféns',
+        'Enter — novo jogo      C — continuar      Esc / P — pausa e tesouros      M — som'];
+    ctx.font = `500 ${Math.round(clamp(13 * s, 10, 13))}px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.6)';
-    lines.forEach((l, i) => ctx.fillText(l, cx, cam.viewH * 0.8 + i * 22));
+    const ly = Math.max(this.titleButtons[this.titleButtons.length - 1].y + bh + 28, cam.viewH * 0.8);
+    lines.forEach((l, i) => ctx.fillText(l, cx, Math.min(cam.viewH - 12 - (lines.length - 1 - i) * 18, ly + i * 20)));
+  },
+
+  /** Aviso para girar o celular (o jogo fica pausado na vertical). */
+  rotateHint(ctx, cam) {
+    ctx.fillStyle = 'rgba(10,7,6,0.88)';
+    ctx.fillRect(0, 0, cam.viewW, cam.viewH);
+    const cx = cam.viewW / 2, cy = cam.viewH / 2;
+    ctx.save();
+    ctx.translate(cx, cy - 40);
+    ctx.rotate(Math.sin(performance.now() / 500) * 0.5 - 0.5);
+    ctx.strokeStyle = '#ffcf6a';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(-22, -36, 44, 72);
+    ctx.restore();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f3e9d8';
+    ctx.font = `700 18px ${FONT_UI}`;
+    ctx.fillText('Gire o celular para jogar', cx, cy + 40);
+    ctx.font = `500 14px ${FONT_UI}`;
+    ctx.fillStyle = 'rgba(243,233,216,0.7)';
+    ctx.fillText('O jogo fica pausado na vertical', cx, cy + 64);
+  },
+
+  /** Posição dos botões de toque neste frame (também usada pelo Input). */
+  touchLayout(w) {
+    const cam = w.camera;
+    const lb = cam.viewH * 0.1 * cam.letterbox;
+    const s = clamp(Math.min(cam.viewW, cam.viewH) / 400, 0.8, 1.35);
+    const R = cam.viewW - 24 * s, B = cam.viewH - 22 * s - lb;
+    const b = [
+      { id: 'attack', x: R - 48 * s, y: B - 50 * s, r: 46 * s, label: '斬', sub: 'CORTE' },
+      { id: 'dash', x: R - 150 * s, y: B - 26 * s, r: 34 * s, label: '»', sub: 'DASH' },
+      { id: 'pause', x: cam.viewW - 30 * s, y: 30 * s + lb, r: 20 * s, label: 'II' },
+    ];
+    const p = w.player;
+    if (p.mods.iai) b.push({ id: 'heavy', x: R - 70 * s, y: B - 150 * s, r: 32 * s, label: '居', sub: 'IAI', off: p.heavyCd > 0 });
+    const near = (w.chests || []).some((c) => !c.opened && c.near()) || (w.villagers || []).some((v) => !v.freed && v.near());
+    if (near) b.push({ id: 'act', x: R - 165 * s, y: B - 120 * s, r: 32 * s, label: '手', sub: 'AGIR', glow: true });
+    return b;
+  },
+
+  touchControls(ctx, w, input) {
+    if (!TOUCH.active || w.cutscene) return;
+    const s = clamp(Math.min(w.camera.viewW, w.camera.viewH) / 400, 0.8, 1.35);
+    // Joystick (fantasma quando solto, para mostrar onde fica).
+    const st = input.stick;
+    const active = st.id !== null;
+    const ox = active ? st.ox : 90 * s, oy = active ? st.oy : w.camera.viewH - 90 * s;
+    const R = input.stickRadius;
+    ctx.save();
+    ctx.globalAlpha = active ? 0.55 : 0.22;
+    ctx.fillStyle = 'rgba(20,14,10,0.6)';
+    ctx.strokeStyle = 'rgba(243,233,216,0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ox, oy, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    let kx = ox, ky = oy;
+    if (active) {
+      const dx = st.x - st.ox, dy = st.y - st.oy, d = Math.hypot(dx, dy);
+      const k = d > R ? R / d : 1;
+      kx = ox + dx * k; ky = oy + dy * k;
+    }
+    ctx.globalAlpha = active ? 0.85 : 0.3;
+    ctx.fillStyle = '#c8322b';
+    ctx.beginPath(); ctx.arc(kx, ky, R * 0.42, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    for (const b of input.buttons) {
+      const held = [...input.held.values()].some((h) => h.id === b.id);
+      ctx.save();
+      ctx.globalAlpha = b.off ? 0.3 : held ? 0.95 : 0.7;
+      ctx.fillStyle = b.id === 'attack' ? 'rgba(200,50,43,0.85)' : b.glow ? `rgba(200,150,40,${0.8 + 0.2 * Math.sin(w.time * 6)})` : 'rgba(20,14,10,0.7)';
+      ctx.strokeStyle = 'rgba(243,233,216,0.75)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * (held ? 0.92 : 1), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#f3e9d8';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${Math.round(b.r * (b.sub ? 0.75 : 0.6))}px ${b.id === 'dash' || b.id === 'pause' ? FONT_UI : FONT_TITLE}`;
+      ctx.fillText(b.label, b.x, b.y - (b.sub ? b.r * 0.12 : 0));
+      if (b.sub) {
+        ctx.font = `700 ${Math.round(9 * s)}px ${FONT_UI}`;
+        ctx.fillText(b.sub, b.x, b.y + b.r * 0.55);
+      }
+      ctx.restore();
+    }
   },
 
   story(ctx, cam, stage, t, index, total) {
     this.panel(ctx, cam, 0.86);
     const cx = cam.viewW / 2;
+    const k = clamp(cam.viewH / 720, 0.55, 1); // telas baixas (celular deitado) encolhem o texto
     const maxW = Math.min(640, cam.viewW - 64);
+    let y = cam.viewH * 0.12;
     ctx.textAlign = 'center';
-    ctx.font = `600 13px ${FONT_UI}`;
+    ctx.font = `600 ${Math.round(13 * k + 1)}px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.5)';
-    ctx.fillText(index < total ? `CAPÍTULO ${index + 1} DE ${total}` : 'EPÍLOGO', cx, cam.viewH * 0.18);
-    ctx.font = `700 ${Math.round(Math.min(64, cam.viewW * 0.08))}px ${FONT_TITLE}`;
+    ctx.fillText(index < total ? `CAPÍTULO ${index + 1} DE ${total}` : 'EPÍLOGO', cx, y);
+    y += 62 * k;
+    ctx.font = `700 ${Math.round(Math.min(64, cam.viewW * 0.08) * k)}px ${FONT_TITLE}`;
     ctx.fillStyle = 'rgba(200,50,43,0.9)';
-    ctx.fillText(stage.kanji, cx, cam.viewH * 0.18 + 66);
-    ctx.font = `700 ${Math.round(Math.min(30, cam.viewW * 0.05))}px ${FONT_TITLE}`;
+    ctx.fillText(stage.kanji, cx, y);
+    y += 42 * k;
+    ctx.font = `700 ${Math.round(Math.min(30, cam.viewW * 0.05) * k + 4)}px ${FONT_TITLE}`;
     ctx.fillStyle = '#f3e9d8';
-    ctx.fillText(stage.name, cx, cam.viewH * 0.18 + 108);
+    ctx.fillText(stage.name, cx, y);
+    y += 50 * k;
 
     // Texto "datilografado"
-    ctx.font = `400 18px ${FONT_TITLE}`;
+    const fs = Math.round(18 * k + 2);
+    ctx.font = `400 ${fs}px ${FONT_TITLE}`;
     let shown = Math.floor(t * 55);
-    let y = cam.viewH * 0.18 + 160;
     ctx.fillStyle = 'rgba(243,233,216,0.92)';
     for (const para of stage.story) {
       const lines = this.wrap(ctx, para, maxW);
@@ -240,15 +360,15 @@ const UI = {
         if (shown <= 0) break;
         ctx.fillText(l.slice(0, shown), cx, y);
         shown -= l.length;
-        y += 28;
+        y += fs * 1.5;
       }
-      y += 14;
+      y += fs * 0.7;
     }
     if (shown > 0) {
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 4);
       ctx.font = `600 14px ${FONT_UI}`;
       ctx.fillStyle = '#ffcf6a';
-      ctx.fillText(index < total ? 'Clique ou Enter para seguir' : 'Clique ou Enter para voltar ao título', cx, Math.min(cam.viewH - 40, y + 30));
+      ctx.fillText(`${this.tapWord()} para ${index < total ? 'seguir' : 'voltar ao título'}`, cx, Math.min(cam.viewH - 16, y + 18));
       ctx.globalAlpha = 1;
     }
   },
@@ -266,7 +386,7 @@ const UI = {
     ctx.fillText('Pausa', cx, cam.viewH * 0.3);
     ctx.font = `500 14px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.7)';
-    ctx.fillText('Esc / P para continuar  ·  M liga/desliga o som', cx, cam.viewH * 0.3 + 30);
+    ctx.fillText(TOUCH.active ? 'Toque na tela para continuar' : 'Esc / P para continuar  ·  M liga/desliga o som', cx, cam.viewH * 0.3 + 30);
     ctx.font = `700 16px ${FONT_TITLE}`;
     ctx.fillStyle = '#ffcf6a';
     ctx.fillText(`Tesouros encontrados (${items.length}/${Object.keys(ITEMS).length})`, cx, cam.viewH * 0.3 + 80);
@@ -285,10 +405,12 @@ const UI = {
   minimap(ctx, w) {
     if (w.cutscene) return;
     const cam = w.camera, L = w.level;
-    const size = Math.min(190, cam.viewW * 0.22);
+    const size = TOUCH.active ? Math.min(130, cam.viewW * 0.18) : Math.min(190, cam.viewW * 0.22);
     const hw = size / (L.W + L.H), hh = hw / 2;
     const ox = cam.viewW - 18 - size / 2;
-    const oy = cam.viewH - 18 - (L.W + L.H) * hh - cam.viewH * 0.1 * cam.letterbox;
+    const oy = TOUCH.active
+      ? 64 + cam.viewH * 0.1 * cam.letterbox // no celular: canto superior (os botões ocupam a parte de baixo)
+      : cam.viewH - 18 - (L.W + L.H) * hh - cam.viewH * 0.1 * cam.letterbox;
     const pt = (x, y) => ({ x: ox + (x - y) * hw, y: oy + (x + y) * hh });
     // Base pré-desenhada uma vez por fase.
     if (!L.miniCanvas || L.miniHw !== hw) {
@@ -368,7 +490,7 @@ const UI = {
     ctx.fillText('Derrotado', cam.viewW / 2, cam.viewH / 2 - 10);
     ctx.font = `500 16px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.8)';
-    ctx.fillText('Clique ou Enter para tentar esta vila de novo', cam.viewW / 2, cam.viewH / 2 + 30);
+    ctx.fillText(`${this.tapWord()} para tentar esta vila de novo`, cam.viewW / 2, cam.viewH / 2 + 30);
     ctx.globalAlpha = 1;
   },
 
@@ -397,7 +519,7 @@ const UI = {
     if (t > 2) {
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 3);
       ctx.fillStyle = '#ffcf6a';
-      ctx.fillText('Clique ou Enter para voltar ao título', cx, y + 56);
+      ctx.fillText(`${this.tapWord()} para voltar ao título`, cx, y + 56);
     }
     ctx.globalAlpha = 1;
   },

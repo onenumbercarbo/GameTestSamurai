@@ -12,6 +12,10 @@ const BACK_SPRITES = {
   ronin_low: ['ronin_back', 1.38], ronin_dual: ['ronin_back_dual', 1.38], ronin_raise: ['ronin_back_raise', 1.38],
   kuno_stance: ['kuno_back', 1.28], kuno_fist: ['kuno_back2', 1.28], kuno_slash: ['kuno_back2', 1.28],
   bandit_dance: ['bandit_back_dance', 1], bandit_dance2: ['bandit_back_dance', 1],
+  // caminhadas novas (folha 12)
+  oni_w0: ['oni_back_raise', 0.72], oni_w1: ['oni_back_raise', 0.72], oni_w2: ['oni_back_raise', 0.72], oni_w3: ['oni_back_raise', 0.72], oni_w4: ['oni_back_raise', 0.72],
+  ronin_w0: ['ronin_wb0', 1], ronin_w1: ['ronin_wb0', 1], ronin_w2: ['ronin_wb0', 1],
+  kuno_r1: ['kuno_wb0', 1], kuno_r2: ['kuno_wb0', 1], kuno_r3: ['kuno_wb0', 1], kuno_r4: ['kuno_wb0', 1], kuno_r5: ['kuno_wb0', 1], kuno_r6: ['kuno_wb0', 1],
   // rōnin (folha pequena: recortada em escala 1, por isso fator ~1,36)
   hero_idle: ['hero_back_idle', 1.4], hero_walk1: ['hero_back_walk1', 1.4], hero_walk2: ['hero_back_walk2', 1.4],
   hero_dash: ['hero_back_dash', 1.4], hero_stance: ['hero_back_stance', 1.4], hero_draw: ['hero_back_draw', 1.4],
@@ -22,6 +26,8 @@ const BACK_WALK = {
   oni_back_raise: ['oni_back_raise', 'oni_back_raise2'],
   ronin_back: ['ronin_back', 'ronin_back_cape'],
   kuno_back: ['kuno_back', 'kuno_back2'],
+  ronin_wb0: ['ronin_wb0', 'ronin_wb1'],
+  kuno_wb0: ['kuno_wb0', 'kuno_wb1'],
 };
 
 class Actor {
@@ -122,7 +128,7 @@ class Actor {
     // balanço e inclinação ao andar
     const sp = Math.hypot(this.vx, this.vy);
     const moving = sp > 0.3 && !opts.still;
-    const bob = moving ? Math.abs(Math.sin(this.stride * Math.PI * 0.95)) * 2.6 * Math.min(1, sp / 4) : 0;
+    const bob = moving && !opts.cycle ? Math.abs(Math.sin(this.stride * Math.PI * 0.95)) * 2.6 * Math.min(1, sp / 4) : 0;
     const screenVx = (this.vx - this.vy); // componente X de tela da velocidade
     this._lean = damp(this._lean, moving ? clamp(screenVx / 12, -0.07, 0.07) : 0, 10, dt || 1);
 
@@ -130,7 +136,7 @@ class Actor {
     const base = {
       flip: false,
       sx,
-      sy: moving ? 1 + Math.sin(this.stride * Math.PI * 1.9) * 0.015 : 1,
+      sy: 1,
       rotate: (opts.rotate || 0) + this._lean,
       tint: opts.tint || '#ffffff',
       tintAmount: opts.tintAmount ?? this.flash * 8,
@@ -140,9 +146,12 @@ class Actor {
 
     // transição entre quadros (inclui a troca de lado e frente/costas)
     if (!this._prev || this._prev.name !== name || this._prev.sx !== sx) {
-      if (this._prev && this._fade >= 1) this._from = { ...this._prev };
-      this._fade = this._prev ? 0 : 1;
-      this._prev = { name, scale: fullScale, sx };
+      // Dentro do mesmo ciclo de caminhada os quadros trocam secos (sem "fantasma");
+      // a fusão curta fica só para mudanças de pose ou de direção.
+      const sameCycle = this._prev && opts.cycle && this._prev.cycle === opts.cycle && this._prev.sx === sx;
+      if (this._prev && this._fade >= 1 && !sameCycle) this._from = { ...this._prev };
+      if (!sameCycle) this._fade = this._prev ? 0 : 1;
+      this._prev = { name, scale: fullScale, sx, cycle: opts.cycle };
     }
     this._fade = Math.min(1, this._fade + dt / 0.08);
     if (this._fade < 1 && this._from) {

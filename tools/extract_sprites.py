@@ -3,7 +3,7 @@ Extrai os sprites das folhas com fundo verde (chroma key) e gera:
   assets/sprites/<nome>.png  — PNG com transparência, já recortado
   js/atlas.js                — tamanhos e ponto de ancoragem (pés) de cada sprite
 
-Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg> <costas_oni_ronin.jpg> <costas_kunoichi.jpg> <costas_aldeoes.jpg> <floresta2.jpg> <ronin_costas.png>
+Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg> <costas_oni_ronin.jpg> <costas_kunoichi.jpg> <costas_aldeoes.jpg> <floresta2.jpg> <ronin_costas.png> <ronin_caminhada.jpg> <npcs_caminhada.jpg>
 
 Cada quadro é definido por um retângulo generoso na folha. Dentro dele mantemos
 o maior componente conectado e qualquer componente que NÃO toque a borda do
@@ -186,11 +186,77 @@ FRAMES = {
     'hero_back_slash': (10, 520, 4, 602, 118, {'scale': 1}),
     'hero_back_draw': (10, 230, 104, 306, 233, {'scale': 1}),
     'hero_back_slash2': (10, 148, 114, 232, 233, {'scale': 1}),
+    # ---------------- Rōnin: ciclos de caminhada em 8 quadros (folha 11) ----------------
+    'hero_bw0': (11, 4, 48, 246, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bw1': (11, 254, 48, 496, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bw2': (11, 504, 48, 746, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bw3': (11, 754, 48, 996, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bw4': (11, 1004, 48, 1246, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bw5': (11, 1254, 48, 1496, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bw6': (11, 1504, 48, 1746, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bw7': (11, 1754, 48, 1996, 312, {'scale': 0.6, 'only_main': True}),
+    'hero_bd0': (11, 4, 346, 246, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_bd1': (11, 254, 346, 496, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_bd2': (11, 504, 346, 746, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_bd3': (11, 754, 346, 996, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_bd4': (11, 1004, 346, 1246, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_bd5': (11, 1254, 346, 1496, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_bd6': (11, 1504, 346, 1746, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_bd7': (11, 1754, 346, 1996, 584, {'scale': 0.6, 'only_main': True}),
+    'hero_sw0': (11, 4, 622, 246, 860, {'scale': 0.6, 'only_main': True}),
+    'hero_sw1': (11, 254, 622, 496, 860, {'scale': 0.6, 'only_main': True}),
+    'hero_sw2': (11, 504, 622, 746, 860, {'scale': 0.6, 'only_main': True}),
+    'hero_sw3': (11, 754, 622, 996, 860, {'scale': 0.6, 'only_main': True}),
+    'hero_sw4': (11, 1004, 622, 1246, 860, {'scale': 0.6, 'only_main': True}),
+    'hero_sw5': (11, 1254, 622, 1496, 860, {'scale': 0.6, 'only_main': True}),
+    'hero_sw6': (11, 1504, 622, 1746, 860, {'scale': 0.6, 'only_main': True}),
+    'hero_sw7': (11, 1754, 622, 1996, 860, {'scale': 0.6, 'only_main': True}),
+    # ---------------- Caminhada dos NPCs (folha 12) ----------------
+    'oni_w0': (12, 0, 0, 200, 362, {'only_main': True}),
+    'oni_w1': (12, 200, 0, 400, 362, {'only_main': True}),
+    'oni_w2': (12, 400, 0, 600, 362, {'only_main': True}),
+    'oni_w3': (12, 600, 0, 800, 362, {'only_main': True}),
+    'oni_w4': (12, 800, 0, 1000, 362, {'only_main': True}),
+    'ronin_w0': (12, 1000, 0, 1200, 362, {'only_main': True}),
+    'ronin_w1': (12, 1200, 0, 1400, 362, {'only_main': True}),
+    'ronin_w2': (12, 1400, 0, 1600, 362, {'only_main': True}),
+    'ronin_wb0': (12, 1600, 0, 1800, 362, {'only_main': True}),
+    'ronin_wb1': (12, 1800, 0, 2000, 362, {'only_main': True}),
+    'monk_w0': (12, 0, 410, 260, 742, {'only_main': True}),
+    'monk_w1': (12, 200, 410, 460, 742, {'only_main': True}),
+    'monk_w2': (12, 400, 410, 660, 742, {'only_main': True}),
+    'monk_w3': (12, 600, 410, 860, 742, {'only_main': True}),
+    'monk_w4': (12, 800, 410, 1060, 742, {'only_main': True}),
+    'soldier_aim2': (12, 1000, 410, 1200, 742, {'only_main': True}),
+    'soldier_w0': (12, 1200, 410, 1400, 742, {'only_main': True}),
+    'soldier_w1': (12, 1400, 410, 1600, 742, {'only_main': True}),
+    'soldier_w2': (12, 1600, 410, 1800, 742, {'only_main': True}),
+    'soldier_w3': (12, 1800, 410, 2000, 742, {'only_main': True}),
+    'kuno_r0': (12, 0, 792, 200, 1142, {'only_main': True}),
+    'kuno_r1': (12, 200, 792, 400, 1142, {'only_main': True}),
+    'kuno_r2': (12, 400, 792, 600, 1142, {'only_main': True}),
+    'kuno_r3': (12, 600, 792, 800, 1142, {'only_main': True}),
+    'kuno_r4': (12, 800, 792, 1000, 1142, {'only_main': True}),
+    'kuno_front': (12, 1000, 792, 1200, 1142, {'only_main': True}),
+    'kuno_wb0': (12, 1200, 792, 1400, 1142, {'only_main': True}),
+    'kuno_wb1': (12, 1400, 792, 1600, 1142, {'only_main': True}),
+    'kuno_r5': (12, 1600, 792, 1800, 1142, {'only_main': True}),
+    'kuno_r6': (12, 1800, 792, 2000, 1142, {'only_main': True}),
+    'villager_tw0': (12, 0, 1188, 200, 1490, {'only_main': True}),
+    'villager_twb0': (12, 200, 1188, 400, 1490, {'only_main': True}),
+    'villager_tw1': (12, 400, 1188, 600, 1490, {'only_main': True}),
+    'villager_tw2': (12, 600, 1188, 800, 1490, {'only_main': True}),
+    'villager_twb1': (12, 800, 1188, 1000, 1490, {'only_main': True}),
+    'bandit_w0': (12, 1000, 1188, 1200, 1490, {'only_main': True}),
+    'bandit_w1': (12, 1200, 1188, 1400, 1490, {'only_main': True}),
+    'bandit_w2': (12, 1400, 1188, 1600, 1490, {'only_main': True}),
+    'bandit_w3': (12, 1600, 1188, 1800, 1490, {'only_main': True}),
+    'bandit_w4': (12, 1800, 1188, 2000, 1490, {'only_main': True}),
 }
 
 # Cor de fundo de cada folha (as duas primeiras são verde-chroma, a terceira verde-claro).
 SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9), 5: (12, 226, 8),
-            6: (4, 234, 1), 7: (9, 218, 2), 8: (11, 219, 3), 9: (174, 219, 162), 10: (12, 228, 9)}
+            6: (4, 234, 1), 7: (9, 218, 2), 8: (11, 219, 3), 9: (174, 219, 162), 10: (12, 228, 9), 11: (76, 130, 78), 12: (13, 235, 0)}
 
 
 def key(rgb, bg=BG):
@@ -369,6 +435,20 @@ def hair_to_black(img):
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
 
 
+def crown_to_black(img, frac):
+    """No topo do sprite (só cabeça), qualquer tom vermelho/laranja vira cabelo preto."""
+    a = np.asarray(img).astype(float)
+    rgb, A = a[..., :3], a[..., 3]
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    rows = np.arange(A.shape[0])[:, None] < A.shape[0] * frac
+    skin = (r > 150) & (g > 100) & (g > b + 15)  # pele clara fica
+    m = rows & (r > g + 25) & (r > b + 20) & ~skin & (A > 0)
+    lum = 0.3 * r + 0.59 * g + 0.11 * b
+    v = lum * 0.38 + 8
+    out = np.where(m[..., None], np.stack([v * 0.95, v * 0.97, v * 1.12], -1), rgb)
+    return Image.fromarray(np.concatenate([np.clip(out, 0, 255), A[..., None]], -1).astype(np.uint8), 'RGBA')
+
+
 def darken_fringe(img):
     """Escurece a franja amarelada/oliva colada na borda transparente (parte de cima)."""
     a = np.asarray(img).astype(float)
@@ -406,6 +486,8 @@ def main(*paths):
         img = img.resize((nw, nh), Image.LANCZOS)
         if name.startswith('hero_'):
             img = hair_to_black(img)  # o rōnin agora tem cabelo preto
+        if name.startswith(('hero_bw', 'hero_bd', 'hero_sw')):
+            img = crown_to_black(img, 0.2)  # mechas avermelhadas no alto da cabeça
         if name.startswith('hero_back_'):
             img = darken_fringe(img)  # folha pequena: contorno dourado na borda do cabelo
         img.save(os.path.join(OUT, name + '.png'), optimize=True)

@@ -212,11 +212,44 @@ class Player extends Actor {
     if (st === 'dash') return { name: 'hero_dash' };
     if (st === 'attack') return this.combo.frame();
     if (st === 'hurt') return { name: 'hero_stance' };
+    const dir = this.screenDir();
     if (st === 'run') {
+      // Ciclos de 8 quadros por direção; o quadro avança com a distância percorrida
+      // (pés não "patinam" e andar devagar = passos mais lentos).
+      const f8 = Math.floor(this.stride * 2.6) % 8;
+      if (dir === 'up') return { name: 'hero_bw' + f8, flip: false, noBack: true, cycle: 'bw' };
+      if (dir === 'upright') return { name: 'hero_bd' + f8, flip: true, noBack: true, cycle: 'bd' };
+      if (dir === 'upleft') return { name: 'hero_bd' + f8, flip: false, noBack: true, cycle: 'bd' };
+      if (dir === 'right') return { name: 'hero_sw' + f8, flip: false, noBack: true, cycle: 'sw' };
+      if (dir === 'left') return { name: 'hero_sw' + f8, flip: true, noBack: true, cycle: 'sw' };
       const seq = ['hero_walk1', 'hero_idle', 'hero_walk2', 'hero_idle'];
-      return { name: seq[Math.floor(this.stride * 1.9) % 4] }; // passos acompanham a velocidade
+      return { name: seq[Math.floor(this.stride * 1.9) % 4], noBack: true, cycle: 'fw' };
     }
-    return { name: this.world.inCombat ? 'hero_stance' : 'hero_idle' };
+    // parado: mantém a vista da última direção
+    if (dir === 'up') return { name: 'hero_bw0', flip: false, noBack: true };
+    if (dir === 'upright' || dir === 'upleft') return { name: 'hero_bd0', flip: dir === 'upright', noBack: true }; // a folha olha para cima-esquerda
+    return { name: this.world.inCombat ? 'hero_stance' : 'hero_idle', noBack: true };
+  }
+
+  /**
+   * Direção do olhar EM ESPAÇO DE TELA, em 8 setores, com histerese de 12°
+   * (não fica alternando entre duas vistas quando a direção está na fronteira).
+   */
+  screenDir() {
+    const c = Math.cos(this.facing), s = Math.sin(this.facing);
+    const a = (Math.atan2((c + s) * Iso.HH, (c - s) * Iso.HW) * 180) / Math.PI; // 0 = direita, -90 = cima
+    const sectors = { right: 0, downright: 45, down: 90, downleft: 135, left: 180, upleft: -135, up: -90, upright: -45 };
+    if (this._dir) {
+      const d = Math.abs(((a - sectors[this._dir] + 540) % 360) - 180);
+      if (d < 22.5 + 12) return this._dir;
+    }
+    let best = 'down', bd = 999;
+    for (const [k, v] of Object.entries(sectors)) {
+      const d = Math.abs(((a - v + 540) % 360) - 180);
+      if (d < bd) { bd = d; best = k; }
+    }
+    this._dir = best;
+    return best;
   }
 
   draw(ctx, cam) {
@@ -230,7 +263,7 @@ class Player extends Actor {
     }
     this.drawShadow(ctx, cam);
     const spr = this.currentSprite();
-    let flip = this.flip;
+    let flip = spr.flip ?? this.flip;
     if (spr.flipInvert) flip = !flip;
     const blink = this.iframes > 0 && this.dashTime <= 0 && Math.floor(this.iframes * 20) % 2 === 0;
     if (!this.alive) {
@@ -240,6 +273,8 @@ class Player extends Actor {
     }
     this.drawSprite(ctx, cam, spr.name, S, {
       flip,
+      noBack: spr.noBack,
+      cycle: spr.cycle,
       alpha: blink ? 0.55 : 1,
       tint: this.hurtTime > 0 ? '#ff3030' : '#ffffff',
       tintAmount: this.hurtTime > 0 ? 0.6 : 0,

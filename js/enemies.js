@@ -23,13 +23,13 @@ const NINJA_TYPES = {
   // Bandido do acampamento: briga de mãos nuas (sprites da folha do acampamento).
   brute: {
     label: 'Bandido', hp: 42, speed: 3.0, damage: 9, windup: 0.45, range: 1.1, arc: 110, lunge: 6, recover: 0.55,
-    sprites: { idle: 'bandit_dance2', walk: ['bandit_dance', 'bandit_dance2'], windup: 'bandit_dance2', strike: 'bandit_dance', hurt: 'bandit_ground' },
+    sprites: { idle: 'bandit_dance2', walk: ['bandit_w0', 'bandit_w1', 'bandit_w2', 'bandit_w3', 'bandit_w4'], windup: 'bandit_dance2', strike: 'bandit_dance', hurt: 'bandit_ground' },
   },
   // Soldado do exército Meiji desertor: atira de longe, baioneta de perto.
   rifle: {
     label: 'Soldado', hp: 38, speed: 2.3, damage: 11, windup: 0.5, range: 1.4, arc: 90, lunge: 6, recover: 0.6, ranged: true,
     shot: { speed: 17, damage: 11, aim: 0.75, style: 'bullet', min: 3, max: 9.5, cd: 2.2 },
-    sprites: { idle: 'soldier_hold', walk: ['soldier_hold', 'soldier_bayonet'], windup: 'soldier_bayonet', strike: 'soldier_bayonet', hurt: 'soldier_hold', aim: 'soldier_aim', throw: 'soldier_fire' },
+    sprites: { idle: 'soldier_hold', walk: ['soldier_w0', 'soldier_w1', 'soldier_w2', 'soldier_w3'], windup: 'soldier_bayonet', strike: 'soldier_bayonet', hurt: 'soldier_hold', aim: 'soldier_aim', throw: 'soldier_fire' },
   },
   black: {
     label: 'Assassino', hp: 52, speed: 2.5, damage: 13, windup: 0.55, range: 1.3, arc: 120, lunge: 7, recover: 0.6, ranged: true,
@@ -277,6 +277,7 @@ class Ninja extends Actor {
     const warn = this.state === 'windup' || this.state === 'aim';
     this.drawSprite(ctx, cam, name, sc, {
       rotate, alpha,
+      cycle: this.state === 'chase' && S.walk.includes(name) ? 'walk' : undefined, // quadros de caminhada trocam secos
       tint: warn ? '#ff2a1a' : '#ffffff',
       tintAmount: warn ? 0.18 + 0.14 * Math.sin(this.t * 40) : this.flash * 8,
     });

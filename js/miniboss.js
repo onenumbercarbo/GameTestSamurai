@@ -24,7 +24,7 @@ const MINIBOSS_DEFS = {
     short: 'Gōriki', name: 'Gōriki, o Oni do Kanabō', kanji: '剛力の鬼', title: 'Brutamontes do clã Kurokama',
     hp: 420, scale: 0.68, radius: 0.5, speed: [1.8, 2.4], poise: [80, 110],
     defense: 'guard', guardChance: [0.25, 0.45], shock: true,
-    sprites: { idle: ['oni_raise'], walk: ['oni_raise'], guard: 'oni_raise', hurt: 'oni_raise', roar: 'oni_raise', intro: 'oni_raise' },
+    sprites: { idle: ['oni_w0'], walk: ['oni_w0', 'oni_w2', 'oni_w3', 'oni_w4', 'oni_w1'], guard: 'oni_raise', hurt: 'oni_raise', roar: 'oni_raise', intro: 'oni_raise' },
     attacks: {
       smash: { kind: 'sweep', windup: 0.7, active: 0.14, recover: 0.55, range: 2.6, arc: 120, damage: 20, wind: 'oni_raise', act: 'oni_slam', rec: 'oni_slam' },
       slam: { kind: 'slam', windup: 0.85, active: 0.12, recover: 0.7, radius: 1.8, reach: 3.4, damage: 24, wind: 'oni_raise', act: 'oni_slam2', rec: 'oni_slam2' },
@@ -37,7 +37,7 @@ const MINIBOSS_DEFS = {
     short: 'Kagerō', name: 'Kagerō, a Garra Sombria', kanji: '陽炎', title: 'Kunoichi assassina do clã',
     hp: 340, scale: 0.62, radius: 0.35, speed: [3.2, 3.9], poise: [60, 80],
     defense: 'evade', guardChance: [0.35, 0.6],
-    sprites: { idle: ['kuno_stance'], walk: ['kuno_jump', 'kuno_stance'], guard: 'kuno_stance', hurt: 'kuno_fist', roar: 'kuno_fist', intro: 'kuno_grab' },
+    sprites: { idle: ['kuno_stance'], walk: ['kuno_r1', 'kuno_r2', 'kuno_r3', 'kuno_r4', 'kuno_r5', 'kuno_r6'], guard: 'kuno_stance', hurt: 'kuno_fist', roar: 'kuno_fist', intro: 'kuno_grab' },
     attacks: {
       claw: { kind: 'sweep', windup: 0.4, active: 0.12, recover: 0.35, range: 1.9, arc: 130, damage: 13, wind: 'kuno_stance', act: 'kuno_slash', rec: 'kuno_stance' },
       dive: { kind: 'lunge', windup: 0.45, active: 0.32, recover: 0.4, speed: 15, width: 1.0, damage: 15, wind: 'kuno_stance', act: 'kuno_lunge', rec: 'kuno_slash' },
@@ -51,7 +51,7 @@ const MINIBOSS_DEFS = {
     short: 'Jōkai', name: 'Jōkai, o Monge Renegado', kanji: '僧兵 浄海', title: 'Sōhei expulso do templo',
     hp: 400, scale: 0.6, radius: 0.45, speed: [2.0, 2.5], poise: [80, 110],
     defense: 'guard', guardChance: [0.35, 0.6],
-    sprites: { idle: ['monk_idle', 'monk_idle2'], walk: ['monk_idle', 'monk_idle2'], guard: 'monk_pray', hurt: 'monk_idle2', roar: 'monk_pray', intro: 'monk_pray' },
+    sprites: { idle: ['monk_idle', 'monk_idle2'], walk: ['monk_w0', 'monk_w1', 'monk_w2', 'monk_w3', 'monk_w4'], guard: 'monk_pray', hurt: 'monk_idle2', roar: 'monk_pray', intro: 'monk_pray' },
     attacks: {
       thrust: { kind: 'lunge', windup: 0.55, active: 0.24, recover: 0.5, speed: 9, width: 0.8, damage: 17, wind: 'monk_thrust_w', act: 'monk_thrust', rec: 'monk_thrust' },
       cleave: { kind: 'sweep', windup: 0.65, active: 0.16, recover: 0.5, range: 3.0, arc: 150, damage: 19, wind: 'monk_raise', act: 'monk_swing', rec: 'monk_swing' },
@@ -64,7 +64,7 @@ const MINIBOSS_DEFS = {
     short: 'Jūrō', name: 'Kasa no Jūrō, o Rōnin de Palha', kanji: '笠の十郎', title: 'Espadachim mercenário do clã',
     hp: 440, scale: 0.62, radius: 0.4, speed: [2.6, 3.2], poise: [80, 110],
     defense: 'guard', guardChance: [0.35, 0.6],
-    sprites: { idle: ['ronin_low'], walk: ['ronin_low', 'ronin_dual'], guard: 'ronin_low', hurt: 'ronin_raise', roar: 'ronin_raise', intro: 'ronin_low' },
+    sprites: { idle: ['ronin_low'], walk: ['ronin_w0', 'ronin_w1', 'ronin_w2', 'ronin_w1'], guard: 'ronin_low', hurt: 'ronin_raise', roar: 'ronin_raise', intro: 'ronin_low' },
     attacks: {
       cross: { kind: 'sweep', windup: 0.5, active: 0.14, recover: 0.4, range: 2.3, arc: 150, damage: 16, wind: 'ronin_low', act: 'ronin_dual', rec: 'ronin_low' },
       iai: { kind: 'lunge', windup: 0.55, active: 0.3, recover: 0.5, speed: 16, width: 1.0, damage: 20, wind: 'ronin_low', act: 'ronin_dual', rec: 'ronin_low' },
@@ -539,7 +539,8 @@ class MiniBoss extends Actor {
     else if (warn) { tint = this.counter ? '#ffd040' : '#ff2a1a'; amount = 0.14 + 0.12 * Math.sin(this.t * 30); }
     else if (this.state === 'stagger') { tint = '#ffffff'; amount = 0.15; }
     const dying = this.state === 'dying';
-    this.drawSprite(ctx, cam, this.currentSprite(), this.D.scale, {
+    this.drawSprite(ctx, cam, this.currentSprite(), this.D.scale * (this.D.walkScale && moving ? this.D.walkScale : 1), {
+      cycle: moving ? 'walk' : undefined,
       flip, tint, tintAmount: amount,
 
       rotate: dying ? (flip ? -1 : 1) * clamp(this.deadT / 0.5, 0, 1) * 1.4 : 0,

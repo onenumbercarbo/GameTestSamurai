@@ -36,7 +36,9 @@ const CONFIG = {
     lookAhead: 0.7,      // tiles de antecipação na direção da mira
     arenaZoom: 1.75,      // plano fixo de arena durante as ondas
     arenaLean: 0.22,
-    safeArea: 0.3,      // o jogador nunca sai desta fração da tela (a partir do centro)
+    safeArea: 0.3,
+    perspective: true,   // 2.5D: chão em perspectiva (tecla V alterna)
+    perspFocal: 1.25,     // distância focal em alturas de tela (menor = perspectiva mais forte)      // o jogador nunca sai desta fração da tela (a partir do centro)
   },
 
   INPUT_BUFFER: 0.28,

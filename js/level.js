@@ -164,15 +164,16 @@ class Prop {
 
   draw(ctx, cam) {
     const p = cam.worldToScreen(this.x, this.y);
-    const wob = this.shake ? Math.sin(this.shake * 60) * this.shake * 10 * cam.scale : 0;
-    Sprites.draw(ctx, this.type, p.x + wob, p.y, this.def.scale * cam.scale, {
+    const k = cam.flatScale * p.s;
+    const wob = this.shake ? Math.sin(this.shake * 60) * this.shake * 10 * k : 0;
+    Sprites.draw(ctx, this.type, p.x + wob, p.y, this.def.scale * k, {
       alpha: this.fade, tint: '#ffffff', tintAmount: (this.flash || 0) * 6,
     });
   }
 
   screenBounds(cam) {
     const p = cam.worldToScreen(this.x, this.y);
-    return Sprites.bounds(this.type, p.x, p.y, this.def.scale * cam.scale);
+    return Sprites.bounds(this.type, p.x, p.y, this.def.scale * cam.flatScale * p.s);
   }
 }
 
@@ -802,15 +803,14 @@ class Level {
     return c;
   }
 
-  drawGround(ctx, cam, time) {
-    if (!this.chunks) this.prepareGround();
-    const CW = 1024, CH = 512, s = cam.scale;
-    const cs = [cam.screenToWorld(0, 0), cam.screenToWorld(cam.viewW, 0), cam.screenToWorld(0, cam.viewH), cam.screenToWorld(cam.viewW, cam.viewH)];
-    const wx0 = Math.min(...cs.map((q) => q.x)), wx1 = Math.max(...cs.map((q) => q.x));
-    const wy0 = Math.min(...cs.map((q) => q.y)), wy1 = Math.max(...cs.map((q) => q.y));
-    // retângulo visível em coordenadas iso (px com zoom 1)
-    const vx0 = cam.x - (cam.viewW / 2 + cam.offX) / s, vy0 = cam.y - (cam.viewH / 2 + cam.offY) / s;
-    const vx1 = vx0 + cam.viewW / s, vy1 = vy0 + cam.viewH / s;
+  /**
+   * Desenha os blocos de chão pré-renderizados vistos por uma câmera PLANA
+   * (isométrica pura): v = { x, y, s, viewW, viewH, offX, offY }.
+   */
+  drawChunks(ctx, v) {
+    const CW = 1024, CH = 512, s = v.s;
+    const vx0 = v.x - (v.viewW / 2 + v.offX) / s, vy0 = v.y - (v.viewH / 2 + v.offY) / s;
+    const vx1 = vx0 + v.viewW / s, vy1 = vy0 + v.viewH / s;
     this.chunkTick = (this.chunkTick || 0) + 1;
     for (let iy = Math.floor(vy0 / CH); iy <= Math.floor(vy1 / CH); iy++) {
       for (let ix = Math.floor(vx0 / CW); ix <= Math.floor(vx1 / CW); ix++) {
@@ -821,11 +821,63 @@ class Level {
           this.chunks.set(key, e);
         }
         e.used = this.chunkTick;
-        const sx = (ix * CW - cam.x) * s + cam.viewW / 2 + cam.offX;
-        const sy = (iy * CH - cam.y) * s + cam.viewH / 2 + cam.offY;
+        const sx = (ix * CW - v.x) * s + v.viewW / 2 + v.offX;
+        const sy = (iy * CH - v.y) * s + v.viewH / 2 + v.offY;
         ctx.drawImage(e.c, Math.floor(sx), Math.floor(sy), Math.ceil(CW * s) + 1, Math.ceil(CH * s) + 1);
       }
     }
+  }
+
+  /**
+   * 2.5D: o chão é desenhado plano num buffer e depois "deitado" em perspectiva,
+   * faixa por faixa da tela (como o Mode 7): cada faixa horizontal da tela
+   * corresponde a uma faixa do chão plano, mais larga quanto mais longe.
+   */
+  drawGroundPerspective(ctx, cam) {
+    const D = cam.D, W = cam.viewW, H = cam.viewH, z = cam.flatScale;
+    const toFlat = (Y) => (Y * D) / (D + Y); // linha da tela (rel. ao centro) -> fy plano
+    const fTop = toFlat(-H / 2 - Math.abs(cam.offY) - 2), fBot = toFlat(H / 2 + Math.abs(cam.offY) + 2);
+    const sTop = D / (D - fTop);
+    const halfW = (W / 2 + Math.abs(cam.offX) + 4) / sTop;
+    // região necessária, em px isométricos com zoom 1
+    const need = { x0: cam.x - halfW / z, x1: cam.x + halfW / z, y0: cam.y + fTop / z, y1: cam.y + fBot / z };
+    const r = Math.min(1.25, window.devicePixelRatio || 1);
+    let c = this.pcache;
+    // O buffer plano tem margem e só é refeito quando a câmera sai dela ou o zoom muda.
+    if (!c || Math.abs(c.z - z) > z * 0.002 || need.x0 < c.x0 || need.x1 > c.x1 || need.y0 < c.y0 || need.y1 > c.y1) {
+      const M = 160 / z;
+      c = this.pcache = this.pcache || { buf: document.createElement('canvas') };
+      Object.assign(c, { z, x0: need.x0 - M, x1: need.x1 + M, y0: need.y0 - M, y1: need.y1 + M });
+      const bw = Math.ceil((c.x1 - c.x0) * z * r), bh = Math.ceil((c.y1 - c.y0) * z * r);
+      if (c.buf.width !== bw || c.buf.height !== bh) { c.buf.width = bw; c.buf.height = bh; }
+      const bctx = c.buf.getContext('2d');
+      bctx.setTransform(r, 0, 0, r, 0, 0);
+      bctx.fillStyle = 'hsl(95, 30%, 9%)';
+      bctx.fillRect(0, 0, bw, bh);
+      const vw = (c.x1 - c.x0) * z, vh = (c.y1 - c.y0) * z;
+      this.drawChunks(bctx, { x: (c.x0 + c.x1) / 2, y: (c.y0 + c.y1) / 2, s: z, viewW: vw, viewH: vh, offX: 0, offY: 0 });
+    }
+    const k = z * r; // px iso (zoom 1) -> px do buffer
+    let y = 0;
+    while (y < H) {
+      const band = y < H * 0.4 ? 4 : 3; // cada faixa é afim: 3-4 px não deixam emenda visível
+      const Y0 = y - H / 2 - cam.offY;
+      const f0 = toFlat(Y0), f1 = toFlat(Y0 + band);
+      const sm = D / (D - (f0 + f1) / 2);
+      const ix0 = cam.x + (-W / 2 - cam.offX) / sm / z;
+      ctx.drawImage(c.buf, (ix0 - c.x0) * k, (cam.y + f0 / z - c.y0) * k, (W / sm / z) * k, ((f1 - f0) / z) * k, 0, y, W, band + 0.5);
+      y += band;
+    }
+  }
+
+  drawGround(ctx, cam, time) {
+    if (!this.chunks) this.prepareGround();
+    const s = cam.flatScale;
+    const cs = [cam.screenToWorld(0, 0), cam.screenToWorld(cam.viewW, 0), cam.screenToWorld(0, cam.viewH), cam.screenToWorld(cam.viewW, cam.viewH)];
+    const wx0 = Math.min(...cs.map((q) => q.x)), wx1 = Math.max(...cs.map((q) => q.x));
+    const wy0 = Math.min(...cs.map((q) => q.y)), wy1 = Math.max(...cs.map((q) => q.y));
+    if (cam.D) this.drawGroundPerspective(ctx, cam);
+    else this.drawChunks(ctx, { x: cam.x, y: cam.y, s, viewW: cam.viewW, viewH: cam.viewH, offX: cam.offX, offY: cam.offY });
     // cache: no máximo ~28 blocos (memória)
     if (this.chunks.size > 28) {
       const old = [...this.chunks.entries()].sort((a, b) => a[1].used - b[1].used);
@@ -842,10 +894,12 @@ class Level {
         const top = cam.worldToScreen(i, j);
         if (top.x < -m || top.x > cam.viewW + m || top.y < -m || top.y > cam.viewH + m) continue;
         const outside = i < 0 || j < 0 || i >= this.W || j >= this.H;
+        cam.ds = top.s;
         if (outside) { if (n > 0.7) this.drawDeco(ctx, cam, i, j, n, 'leaves', time); continue; }
         if (this.tiles[j * this.W + i] === T_GRASS) this.drawDeco(ctx, cam, i, j, n, this.styleAt(i).deco, time);
       }
     }
+    cam.unfocus();
   }
 
   drawDeco(ctx, cam, i, j, n, deco, time) {

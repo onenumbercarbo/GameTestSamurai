@@ -36,6 +36,9 @@ class Camera {
     this.offY = 0;
     this.letterbox = 0;      // 0..1 — faixas pretas de cinema
     this.letterboxTarget = 0;
+    // 2.5D: perspectiva sobre o plano isométrico (ver project()).
+    this.persp = CONFIG.CAMERA.perspective;
+    this.ds = 1;             // escala de profundidade do objeto sendo desenhado (focus)
   }
 
   resize(w, h) {
@@ -43,9 +46,40 @@ class Camera {
     this.viewH = h;
   }
 
-  /** Escala efetiva (zoom × punch), usada para dimensionar sprites e traços. */
-  get scale() {
+  /** Zoom "plano" (zoom × punch), sem a perspectiva. */
+  get flatScale() {
     return this.zoom * (1 + this.punch);
+  }
+
+  /**
+   * Escala efetiva usada para dimensionar sprites e traços: zoom × punch × a
+   * escala de profundidade do objeto em foco (perto = maior, longe = menor).
+   */
+  get scale() {
+    return this.zoom * (1 + this.punch) * this.ds;
+  }
+
+  /** Distância focal da perspectiva em px de tela (0 = isométrico puro). */
+  get D() {
+    return this.persp ? this.viewH * CONFIG.CAMERA.perspFocal : 0;
+  }
+
+  /** Escala de profundidade num ponto do chão. */
+  depthAt(wx, wy) {
+    const D = this.D;
+    if (!D) return 1;
+    const p = Iso.toScreen(wx, wy);
+    const fy = (p.y - this.y) * this.flatScale;
+    return D / Math.max(D * 0.08, D - fy);
+  }
+
+  /** Coloca um objeto "em foco": os tamanhos (cam.scale) seguem a profundidade dele. */
+  focus(wx, wy) {
+    this.ds = this.depthAt(wx, wy);
+  }
+
+  unfocus() {
+    this.ds = 1;
   }
 
   /** Ajuste do zoom ao tamanho da janela: telas pequenas veem um pouco mais. */
@@ -96,7 +130,7 @@ class Camera {
    */
   keepInFrame(wx, wy, frac) {
     const p = Iso.toScreen(wx, wy);
-    const z = this.scale;
+    const z = this.flatScale;
     const limX = (this.viewW * frac) / z;
     const limY = (this.viewH * frac) / z;
     const upY = (this.viewH * frac) / z + 50; // o corpo do sprite sobe acima dos pés
@@ -106,20 +140,40 @@ class Camera {
     if (this.y - p.y > upY) this.y = p.y + upY;
   }
 
+  /**
+   * ====================== 2.5D: PERSPECTIVA ======================
+   * Primeiro projetamos o mundo no plano isométrico "achatado" (fx, fy em px,
+   * relativos ao centro da tela). Depois inclinamos esse plano para longe da
+   * câmera com uma projeção perspectiva (homografia) de distância focal D:
+   *
+   *      s  = D / (D - fy)          (escala de profundidade: fy<0 = longe)
+   *      sx = fx · s,   sy = fy · s
+   *
+   * Assim o chão converge para o fundo, o que está no alto da tela fica menor
+   * e o que está embaixo fica maior. Alturas (wz) são erguidas com a mesma s.
+   */
   worldToScreen(wx, wy, wz = 0) {
-    const p = Iso.toScreen(wx, wy, wz);
-    const z = this.scale;
+    const p = Iso.toScreen(wx, wy);
+    const z = this.flatScale;
+    const fx = (p.x - this.x) * z, fy = (p.y - this.y) * z;
+    const D = this.D;
+    const s = D ? D / Math.max(D * 0.08, D - fy) : 1;
     return {
-      x: (p.x - this.x) * z + this.viewW / 2 + this.offX,
-      y: (p.y - this.y) * z + this.viewH / 2 + this.offY,
+      x: fx * s + this.viewW / 2 + this.offX,
+      y: fy * s - wz * z * s + this.viewH / 2 + this.offY,
+      s,
     };
   }
 
   screenToWorld(sx, sy) {
-    const z = this.scale;
-    return Iso.toWorld(
-      (sx - this.viewW / 2 - this.offX) / z + this.x,
-      (sy - this.viewH / 2 - this.offY) / z + this.y
-    );
+    const z = this.flatScale;
+    let X = sx - this.viewW / 2 - this.offX, Y = sy - this.viewH / 2 - this.offY;
+    const D = this.D;
+    if (D) {
+      const fy = (Y * D) / (D + Math.max(Y, -D * 0.9));
+      X *= (D - fy) / D;
+      Y = fy;
+    }
+    return Iso.toWorld(X / z + this.x, Y / z + this.y);
   }
 }

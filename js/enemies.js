@@ -254,7 +254,7 @@ class Ninja extends Actor {
   draw(ctx, cam) {
     const S = this.type.sprites;
     const sc = CONFIG.SPRITE_SCALE * 0.96;
-    let name = S.idle, rotate = 0, alpha = 1;
+    let name = S.idle, rotate = 0, alpha = 1, dp = null;
     switch (this.state) {
       case 'spawn': alpha = clamp((this.t - 0.15) / 0.25, 0, 1); break;
       case 'camp': name = this.campSprite || (this.pose === 'sit' ? S.hurt : S.idle); break;
@@ -265,21 +265,23 @@ class Ninja extends Actor {
       case 'strike': name = S.strike; break;
       case 'throw': name = S.throw || S.strike; break;
       case 'recover': case 'hurt': name = S.hurt; break;
-      case 'dead':
+      case 'dead': {
         name = S.hurt;
-        rotate = (this.flip ? -1 : 1) * clamp(this.deadT / 0.35, 0, 1) * 1.4;
-        alpha = 1 - clamp((this.deadT - 0.6) / 0.5, 0, 1);
+        dp = this.deathPose(this.deadT * 1.25, 1.4); // um pouco mais rápido que o mini-chefe
+        rotate = dp.rotate;
+        alpha = dp.alpha;
         break;
+      }
     }
     if (alpha <= 0) return;
     this.drawShadow(ctx, cam, 0.9);
     // Preparação de ataque: brilho vermelho pulsante no corpo (telegráfo extra).
     const warn = this.state === 'windup' || this.state === 'aim';
     this.drawSprite(ctx, cam, name, sc, {
-      rotate, alpha,
+      rotate, alpha, sy: dp ? dp.sy : 1,
       cycle: this.state === 'chase' && S.walk.includes(name) ? 'walk' : undefined, // quadros de caminhada trocam secos
-      tint: warn ? '#ff2a1a' : '#ffffff',
-      tintAmount: warn ? 0.18 + 0.14 * Math.sin(this.t * 40) : this.flash * 8,
+      tint: warn ? '#ff2a1a' : dp && this.flash <= 0 ? dp.tint : '#ffffff',
+      tintAmount: warn ? 0.18 + 0.14 * Math.sin(this.t * 40) : dp && this.flash <= 0 ? dp.tintAmount : this.flash * 8,
     });
     // "!" de alerta (estilo jogos de furtividade).
     if (this.alertT > 0 && this.alive) {

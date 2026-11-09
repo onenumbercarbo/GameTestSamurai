@@ -22,20 +22,26 @@ const Ground = {
     ctx.closePath();
   },
 
-  /** Um círculo de raio r no mundo = elipse com semi-eixos r·√2·HW e r·√2·HH. */
+  /** Um círculo de raio r no mundo (polígono: fica correto também em perspectiva). */
   circle(ctx, cam, x, y, r) {
-    const c = cam.worldToScreen(x, y);
-    const s = cam.scale * Math.SQRT2 * r;
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, s * Iso.HW, s * Iso.HH, 0, 0, Math.PI * 2);
+    this._loop(ctx, cam, x, y, r, false);
+  },
+
+  _loop(ctx, cam, x, y, r, rev) {
+    const n = 40;
+    for (let i = 0; i <= n; i++) {
+      const a = ((rev ? n - i : i) / n) * Math.PI * 2;
+      const p = cam.worldToScreen(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+    }
+    ctx.closePath();
   },
 
   ring(ctx, cam, x, y, r0, r1) {
-    const c = cam.worldToScreen(x, y);
-    const k = cam.scale * Math.SQRT2;
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, r1 * k * Iso.HW, r1 * k * Iso.HH, 0, 0, Math.PI * 2);
-    ctx.ellipse(c.x, c.y, Math.max(0.01, r0) * k * Iso.HW, Math.max(0.01, r0) * k * Iso.HH, 0, 0, Math.PI * 2, true);
+    this._loop(ctx, cam, x, y, r1, false);
+    this._loop(ctx, cam, x, y, Math.max(0.01, r0), true);
   },
 
   sector(ctx, cam, x, y, r, aim, arcDeg) {

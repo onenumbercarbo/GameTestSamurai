@@ -84,9 +84,13 @@ class Townsperson {
       this.wait -= dt;
       if (!this.target && this.wait <= 0) {
         const R = this.zone.done ? 7 : 3;
-        for (let k = 0; k < 8; k++) {
+        for (let k = 0; k < 16; k++) {
           const a = Math.random() * Math.PI * 2, r = 1 + Math.random() * R;
           const tx = this.home.x + Math.cos(a) * r, ty = this.home.y + Math.sin(a) * r;
+          // Sem pose de costas na folha: nunca andar "para dentro" da tela (mostraria o
+          // rosto de quem está indo embora). Para subir, vão em diagonais rasas, de perfil.
+          const ex = tx - this.x, ey = ty - this.y, scx = ex - ey, scy = (ex + ey) / 2;
+          if (scy < -0.35 * Math.abs(scx)) continue;
           if (L.isFree(tx, ty, 0.3) && !L.blocked[Math.floor(ty) * L.W + Math.floor(tx)]) { this.target = { x: tx, y: ty }; break; }
         }
         this.wait = 1;
@@ -112,6 +116,16 @@ class Townsperson {
       }
     }
 
+    // Qualquer passo "para dentro" da tela vira diagonal rasa (sem pose de costas).
+    if (dir) {
+      let scx = dir.x - dir.y, scy = (dir.x + dir.y) / 2;
+      if (scy < -0.35 * Math.abs(scx)) {
+        scx = (scx === 0 ? (this.flipX ? -1 : 1) : Math.sign(scx)) * Math.max(Math.abs(scx), 1);
+        scy = -0.35 * Math.abs(scx);
+        const ex = scy + scx / 2, ey = scy - scx / 2, n = Math.hypot(ex, ey);
+        dir = { x: ex / n, y: ey / n };
+      }
+    }
     this.vx = dir ? dir.x * speed : 0;
     this.vy = dir ? dir.y * speed : 0;
     if (dir && Math.abs(dir.x - dir.y) > 0.1) this.flipX = dir.x - dir.y < 0;

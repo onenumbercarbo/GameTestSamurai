@@ -886,8 +886,9 @@ class Cutscene {
 
     w.effects.drawGround(ctx, cam);
     const cx = w.player.x, near = (o) => Math.abs(o.x - cx) < 26;
-    for (const e of w.enemies) if (near(e)) e.drawGround(ctx, cam);
-    for (const b of w.bosses) if (near(b)) b.drawGround(ctx, cam);
+    for (const e of w.enemies) if (near(e)) { cam.focus(e.x, e.y); e.drawGround(ctx, cam); }
+    for (const b of w.bosses) if (near(b)) { cam.focus(b.x, b.y); b.drawGround(ctx, cam); }
+    cam.unfocus();
 
     // Monta a lista de desenháveis visíveis e ordena por profundidade isométrica.
     const list = [];
@@ -914,10 +915,26 @@ class Cutscene {
       }
       d.fade = damp(d.fade, target, 10, 1 / 60);
     });
-    for (const d of sorted) d.draw(ctx, cam);
-
+    // 2.5D: cada objeto é desenhado na escala da sua profundidade (cam.focus).
+    for (const d of sorted) {
+      if (d.isProp) cam.unfocus(); else cam.focus(d.x, d.y);
+      d.draw(ctx, cam);
+    }
+    cam.focus(w.player.x, w.player.y); // efeitos (golpes, faíscas) acompanham o jogador
     w.effects.draw(ctx, cam);
+    cam.unfocus();
+    if (cam.D) renderHaze(cam);
     if (game.debug) renderDebug(w);
+  }
+
+  /** 2.5D: névoa de distância no alto da tela (o fundo "some" no ar). */
+  function renderHaze(cam) {
+    const g = ctx.createLinearGradient(0, 0, 0, cam.viewH * 0.45);
+    g.addColorStop(0, 'rgba(22,30,26,0.55)');
+    g.addColorStop(0.5, 'rgba(22,30,26,0.18)');
+    g.addColorStop(1, 'rgba(22,30,26,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cam.viewW, cam.viewH * 0.45);
   }
 
   /** Clima por cima do mundo e abaixo do HUD; também liga/desliga o som da chuva. */
@@ -1139,6 +1156,8 @@ class Cutscene {
         if (w.cutscene && w.cutscene.skippable && (input.wasPressed('Enter', 'Escape', 'Space') || input.clicked)) {
           w.cutscene.skip(); // plano de abertura pode ser pulado
           input.flush();
+        } else if (input.wasPressed('KeyV')) {
+          camera.persp = !camera.persp; // alterna 2.5D (perspectiva) / isométrico
         } else if (input.wasPressed('Escape', 'KeyP')) {
           game.state = 'paused';
           break;
@@ -1259,6 +1278,7 @@ class Cutscene {
   });
 
   requestAnimationFrame(frame);
-  window.__game = game; // para depuração no console
+  window.__game = game;
+  window.__camera = camera; // para depuração no console
   window.__createWorld = createWorld;
 })();

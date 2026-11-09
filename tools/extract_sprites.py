@@ -672,6 +672,54 @@ def stride_frame(img, k, hip_frac=0.6, close=0.45, lift=0.08, swing=0.0):
     return Image.fromarray(out.clip(0, 255).astype(np.uint8), 'RGBA')
 
 
+DEBASE = ('forest_mixed', 'forest_bamboo_pine', 'forest_dark', 'bamboo_grove', 'forest_sakura',
+          'forest_broadleaf', 'forest_pines', 'bonsai_pine')
+
+
+def debase(img, top_frac=0.45):
+    """Remove o 'chão' isométrico pintado sob árvores/moitas (losango verde liso)
+    e fragmentos soltos de vizinhos que vieram no recorte."""
+    from scipy import ndimage as ndi  # pip install scipy
+    a = np.asarray(img.convert('RGBA')).astype(float)
+    h, w = a.shape[:2]
+    rgb = a[..., :3]
+    lum = rgb.mean(-1)
+    # textura local: folhas têm contorno e brilho; o chão é liso
+    blur = ndi.uniform_filter(lum, 5)
+    var = ndi.uniform_filter((lum - blur) ** 2, 7)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    green = (g > r * 1.08) & (g > b * 1.15) & (lum > 40) & (lum < 140)
+    smooth = var < 140
+    # chão sombreado (sob as copas): mais escuro, só perto da base
+    dark = (g > r * 1.03) & (g > b * 0.98) & (lum > 16) & (lum <= 60) & (var < 90)
+    yy = np.arange(h)[:, None] * np.ones((1, w))
+    cand = ((green & smooth & (yy > h * (1 - top_frac))) | (dark & (yy > h * 0.78))) & (a[..., 3] > 0)
+    cand = ndi.binary_opening(cand, iterations=1)
+    lab, n = ndi.label(cand)
+    if n:
+        sizes = ndi.sum(cand, lab, range(1, n + 1))
+        # só regiões grandes que encostam na faixa de baixo (o chão), não buracos na copa
+        bottom = set(np.unique(lab[int(h * 0.85):][lab[int(h * 0.85):] > 0]))
+        ids = [i + 1 for i in range(n) if sizes[i] > w * h * 0.004 and (i + 1) in bottom]
+        keep = np.isin(lab, ids)
+        keep = ndi.binary_closing(keep, iterations=3)
+        keep = ndi.binary_fill_holes(keep) & (a[..., 3] > 0) & ~(~green & ~dark & (var > 300))
+        # contorno escuro do losango: escuro e não marrom (tronco é marrom)
+        ring = ndi.binary_dilation(keep, iterations=3) & ~keep
+        keep |= ring & (lum < 75) & (r <= g + 4)
+        soft = ndi.gaussian_filter(keep.astype(float), 1.0)
+        a[..., 3] *= 1 - np.clip(soft * 1.4, 0, 1)
+    # fragmentos soltos: só fica o maior componente e os que forem grandes
+    op = a[..., 3] > 30
+    lab, n = ndi.label(op)
+    if n > 1:
+        sizes = ndi.sum(op, lab, range(1, n + 1))
+        big = sizes.max()
+        drop = np.isin(lab, 1 + np.nonzero(sizes < big * 0.12)[0])
+        a[..., 3][drop] = 0
+    return Image.fromarray(a.clip(0, 255).astype(np.uint8), 'RGBA')
+
+
 def main(*paths):
     # folhas: 1 boss, 2 herói/ninjas/casas, 3 floresta, 4 acampamento, 5 mini-chefes,
     #         6 oni/rōnin de costas, 7 kunoichi de costas, 8 aldeões/bandido de costas, 9 floresta 2
@@ -693,6 +741,8 @@ def main(*paths):
             img = hair_to_black(img)  # o rōnin agora tem cabelo preto
         if name.startswith(('hero_bw', 'hero_bd', 'hero_sw')):
             img = crown_to_black(img, 0.2)  # mechas avermelhadas no alto da cabeça
+        if name in DEBASE:
+            img = debase(img)  # sem o losango de chão pintado (aparecia como "quadriculado")
         if name.startswith(('hero_back_', 'hero_front')):
             img = darken_fringe(img)  # folha pequena: contorno dourado na borda do cabelo
         img.save(os.path.join(OUT, name + '.png'), optimize=True)

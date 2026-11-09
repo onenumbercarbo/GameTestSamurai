@@ -539,12 +539,15 @@ class MiniBoss extends Actor {
     else if (warn) { tint = this.counter ? '#ffd040' : '#ff2a1a'; amount = 0.14 + 0.12 * Math.sin(this.t * 30); }
     else if (this.state === 'stagger') { tint = '#ffffff'; amount = 0.15; }
     const dying = this.state === 'dying';
+    const dp = dying ? this.deathPose(this.deadT, 1.4) : null;
     this.drawSprite(ctx, cam, this.currentSprite(), this.D.scale * (this.D.walkScale && moving ? this.D.walkScale : 1), {
       cycle: moving ? 'walk' : undefined,
-      flip, tint, tintAmount: amount,
-
-      rotate: dying ? (flip ? -1 : 1) * clamp(this.deadT / 0.5, 0, 1) * 1.4 : 0,
-      alpha: dying ? 1 - clamp((this.deadT - 0.9) / 0.5, 0, 1) : this.alpha,
+      flip,
+      tint: dp ? (this.flash > 0 ? tint : dp.tint) : tint,
+      tintAmount: dp ? (this.flash > 0 ? amount : dp.tintAmount) : amount,
+      rotate: dp ? dp.rotate : 0,
+      sy: dp ? dp.sy : 1,
+      alpha: dp ? dp.alpha : this.alpha,
     });
   }
 }

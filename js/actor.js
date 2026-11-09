@@ -30,6 +30,11 @@ const BACK_WALK = {
   kuno_wb0: ['kuno_wb0', 'kuno_wb1'],
 };
 
+/** O sprite é uma pose de costas? (folhas "back", "_wb", "_bw", "_bd") */
+function isBack(name) {
+  return /back|_wb\d|_bw\d|_bd\d/.test(name);
+}
+
 class Actor {
   constructor(world, x, y, radius) {
     this.world = world;
@@ -96,7 +101,34 @@ class Actor {
 
   /** Olhando para longe da câmera? (componente Y de tela da direção < 0) */
   get facingAway() {
-    return Math.cos(this.facing) + Math.sin(this.facing) < -0.45;
+    // Histerese: perto da fronteira não fica alternando frente/costas
+    // (a troca rápida misturava o rosto da pose de frente com as costas).
+    const v = Math.cos(this.facing) + Math.sin(this.facing);
+    if (this._away) { if (v > -0.2) this._away = false; }
+    else if (v < -0.55) this._away = true;
+    return !!this._away;
+  }
+
+  /**
+   * Morte em três tempos (em vez de tombar duro como um boneco):
+   * recua com o golpe, cai de joelhos (o corpo encolhe a partir dos pés),
+   * desaba para a frente e se apaga escurecendo.
+   */
+  deathPose(t, total = 1.4) {
+    const e = (v) => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
+    const dir = this.flip ? -1 : 1;
+    const k1 = e(t / 0.16), k2 = e((t - 0.14) / 0.42), k3 = e((t - 0.58) / 0.5);
+    if (t > 0.75 && !this._deathDust) {
+      this._deathDust = true;
+      this.world.effects.smoke(this.x, this.y, 7, '110,100,90', 0.45);
+    }
+    return {
+      rotate: dir * (-0.14 * k1 * (1 - k2) + 0.16 * k2 + 0.38 * k3),
+      sy: 1 - 0.24 * k2 - 0.16 * k3,
+      tint: '#000000',
+      tintAmount: 0.4 * k3,
+      alpha: 1 - clamp((t - (total - 0.45)) / 0.45, 0, 1),
+    };
   }
 
   /**
@@ -139,7 +171,7 @@ class Actor {
     const base = {
       flip: false,
       sx,
-      sy: 1,
+      sy: opts.sy ?? 1,
       rotate: (opts.rotate || 0) + this._lean,
       tint: opts.tint || '#ffffff',
       tintAmount: opts.tintAmount ?? this.flash * 8,
@@ -152,9 +184,11 @@ class Actor {
       // Dentro do mesmo ciclo de caminhada os quadros trocam secos (sem "fantasma");
       // a fusão curta fica só para mudanças de pose ou de direção.
       const sameCycle = this._prev && opts.cycle && this._prev.cycle === opts.cycle && this._prev.sx === sx;
-      if (this._prev && this._fade >= 1 && !sameCycle) this._from = { ...this._prev };
-      if (!sameCycle) this._fade = this._prev ? 0 : 1;
-      this._prev = { name, scale: fullScale, sx, cycle: opts.cycle };
+      // Frente <-> costas troca seco: a fusão deixava um "rosto nas costas".
+      const turned = this._prev && this._prev.back !== (k !== 1 || isBack(name));
+      if (this._prev && this._fade >= 1 && !sameCycle && !turned) this._from = { ...this._prev };
+      if (!sameCycle) this._fade = this._prev && !turned ? 0 : 1;
+      this._prev = { name, scale: fullScale, sx, cycle: opts.cycle, back: k !== 1 || isBack(name) };
     }
     this._fade = Math.min(1, this._fade + dt / 0.08);
     if (this._fade < 1 && this._from) {

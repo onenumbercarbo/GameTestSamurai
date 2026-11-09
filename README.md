@@ -25,6 +25,7 @@ Abra `index.html` no navegador do computador ou do celular.
 | Iaijutsu, golpe pesado (precisa do pergaminho) | Botão direito |
 | Abrir baú / libertar aldeão | `E` |
 | Pausa e tesouros / Som / Debug | `Esc` ou `P` / `M` / `F3` |
+| Alternar 2.5D (perspectiva) / isométrico | `V` |
 
 O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência de mira o vira para o inimigo mais próximo; parado e sem inimigos por perto, ele segue o mouse.
 
@@ -96,6 +97,14 @@ A câmera é dirigida por planos pré-definidos (`directCamera` em `js/main.js`)
 
 Como a arte é isométrica fixa, "ângulo" aqui significa enquadramento, zoom e posição. Girar a câmera exigiria sprites desenhados em várias vistas.
 
+### 2.5D (perspectiva)
+
+Por padrão o plano isométrico é inclinado em perspectiva (`Camera.worldToScreen`, em `js/camera.js`). Um ponto a `fy` px do centro da tela no plano isométrico vai para `fy·s`, com `s = D/(D − fy)`. O fundo fica menor e a frente maior, e o chão converge.
+
+- **Chão**: é renderizado plano num buffer com margem (refeito só quando a câmera sai dela) e deitado na tela em faixas horizontais, como no Mode 7 (`Level.drawGroundPerspective`).
+- **Sprites**: personagens, casas e árvores ficam em pé, como cartões, na escala da sua profundidade (`cam.focus`).
+- **Ajuste**: a intensidade fica em `CONFIG.CAMERA.perspFocal`, e a tecla `V` alterna com o isométrico puro.
+
 ## Estrutura
 
 ```
@@ -120,4 +129,4 @@ js/ui.js / main.js         HUD, telas, cutscenes, diretor de câmera e game loop
 python3 tools/extract_sprites.py folha_boss.jpg folha_heroi.jpg folha_floresta.jpg folha_acampamento.jpg folha_minichefes.jpg costas_oni_ronin.jpg costas_kunoichi.jpg costas_aldeoes.jpg floresta2.jpg
 ```
 
-Requer Pillow e NumPy. Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.
+Requer Pillow, NumPy e SciPy (a SciPy remove o chão pintado sob as árvores). Os retângulos de cada quadro ficam em `FRAMES`, no topo do script.

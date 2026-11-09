@@ -726,27 +726,28 @@ def debase(img, top_frac=0.45):
 # hakama fica de fora porque é cercado pelo contorno escuro.
 # (x0, y0, x1, y1, opções) — tol: tolerância do fundo; dark: (x_lim, v_max)
 # remove o "fantasma" claro do golpe à esquerda de x_lim.
+SIDE_BG = 156  # cinza do fundo da folha de perfil (20.jpg)
 SIDE_FRAMES = {
-    'rs_walk0': (17, 70, 141, 302, {}), 'rs_walk1': (145, 70, 269, 302, {}),
-    'rs_walk2': (273, 70, 397, 302, {}), 'rs_walk3': (402, 70, 527, 302, {}),
-    'rs_atk0': (568, 80, 702, 306, {}), 'rs_atk1': (800, 64, 980, 306, {}),
-    'rs_atk2': (962, 80, 1122, 306, {}),
-    'rs_block0': (1134, 38, 1264, 306, {}), 'rs_block1': (1266, 8, 1395, 306, {}),
-    'rs_die0': (1452, 85, 1581, 306, {}), 'rs_die1': (1578, 90, 1701, 306, {}),
-    'rs_die2': (1700, 118, 1809, 304, {}), 'rs_die3': (1807, 118, 1997, 304, {}),
-    'ns_walk0': (6, 455, 145, 688, {}), 'ns_walk1': (144, 455, 271, 688, {}),
-    'ns_walk2': (267, 455, 406, 688, {}), 'ns_walk3': (399, 455, 528, 688, {}),
-    'ns_atk0': (550, 455, 700, 688, {'darkR': (674, 75)}), 'ns_atk1': (776, 455, 926, 688, {'dark': (806, 70)}),
-    'ns_atk2': (897, 455, 1128, 688, {}),
-    'ns_block0': (1128, 445, 1251, 688, {}), 'ns_block1': (1250, 445, 1368, 688, {}),
-    'ns_block2': (1366, 445, 1493, 688, {}),
-    'ns_die0': (1516, 480, 1679, 688, {}), 'ns_die1': (1660, 490, 1820, 688, {}),
-    'ns_die2': (1807, 575, 2000, 690, {}),
-    # cenário de perfil
-    'ss_house_long': (0, 806, 552, 1158, {'bg': 163, 'tol': 7}), 'ss_house_tile': (655, 703, 1150, 1152, {'bg': 156, 'tol': 24}),
-    'ss_lantern': (479, 1012, 546, 1150, {'bg': 163, 'tol': 7, 'light': 178}),
-   
-    'ss_ground': (1252, 814, 1560, 962, {'raw': True}), 'ss_wall': (1160, 1022, 1540, 1191, {'raw': True}),
+    'rs_walk0': (25, 76, 151, 298, {}), 'rs_walk1': (152, 76, 277, 298, {}),
+    'rs_walk2': (279, 76, 404, 300, {}), 'rs_walk3': (408, 76, 534, 299, {}),
+    'rs_atk0': (572, 85, 703, 305, {}), 'rs_atk1': (806, 64, 978, 305, {}),
+    'rs_atk2': (958, 86, 1120, 303, {}),
+    'rs_block0': (1132, 55, 1260, 303, {}), 'rs_block1': (1263, 12, 1390, 303, {}),
+    'rs_die0': (1448, 92, 1576, 304, {}), 'rs_die1': (1580, 96, 1691, 304, {}),
+    'rs_die2': (1690, 120, 1803, 299, {}), 'rs_die3': (1774, 200, 1986, 320, {'clip': [(1774, 200, 1806, 288)]}),
+    'ns_walk0': (14, 444, 153, 667, {}), 'ns_walk1': (152, 440, 279, 667, {}),
+    'ns_walk2': (274, 444, 410, 668, {}), 'ns_walk3': (405, 440, 533, 666, {}),
+    'ns_atk0': (554, 440, 694, 668, {'darkR': (676, 60)}), 'ns_atk1': (770, 440, 928, 668, {'dark': (804, 55)}),
+    'ns_atk2': (899, 444, 1126, 668, {}),
+    'ns_block0': (1124, 436, 1247, 666, {}), 'ns_block1': (1245, 436, 1364, 666, {}),
+    'ns_block2': (1361, 436, 1488, 666, {}),
+    'ns_die0': (1510, 466, 1670, 663, {}), 'ns_die1': (1652, 474, 1810, 665, {}),
+    'ns_die2': (1797, 560, 1991, 670, {}),
+    # cenário de perfil: painéis inteiros (bordas esfumadas) e ladrilhos
+    'ss_gate': (0, 683, 545, 1116, {'plate': True}), 'ss_bell': (688, 683, 1218, 1116, {'plate': True}),
+    'ss_grove': (1648, 683, 2000, 1116, {'plate': True}),
+    'ss_lantern': (1556, 982, 1642, 1102, {'bg': 145, 'tol': 7}),
+    'ss_ground': (1247, 795, 1640, 905, {'raw': True}), 'ss_wall': (1155, 990, 1530, 1116, {'raw': True}),
 }
 
 
@@ -758,16 +759,26 @@ def side_sheet(path):
     for name, (x0, y0, x1, y1, o) in SIDE_FRAMES.items():
         c = g[y0:y1, x0:x1]
         h, w = c.shape
+        if o.get('plate'):  # painel de cena: opaco, com as bordas laterais e o topo esfumados
+            al = np.full((h, w), 255.0)
+            f = 46
+            ramp = np.clip(np.arange(w) / f, 0, 1) * np.clip((w - 1 - np.arange(w)) / f, 0, 1)
+            al *= ramp[None, :] * np.clip(np.arange(h) / f, 0, 1)[:, None]
+            rgba = np.dstack([c, c, c, al]).astype(np.uint8)
+            out[name] = (Image.fromarray(rgba, 'RGBA'), (w / 2, h))
+            continue
         if o.get('raw'):  # ladrilho opaco (chão, muro)
             rgba = np.dstack([c, c, c, np.full_like(c, 255)]).astype(np.uint8)
             out[name] = (Image.fromarray(rgba, 'RGBA'), (w / 2, h))
             continue
-        near = np.abs(c - o.get('bg', 213)) <= o.get('tol', 10)
+        near = np.abs(c - o.get('bg', SIDE_BG)) <= o.get('tol', 9)
         if 'light' in o:  # parede clara atrás do objeto também conta como fundo
             near |= c >= o['light']
         lab, _ = ndi.label(near)
         border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
         fg = ~np.isin(lab, list(border))
+        for cx0, cy0, cx1, cy1 in o.get('clip', []):  # retângulos (coords da folha) a apagar
+            fg[max(cy0 - y0, 0):max(cy1 - y0, 0), max(cx0 - x0, 0):max(cx1 - x0, 0)] = False
         if 'dark' in o:
             xl, vmax = o['dark']
             cols = np.arange(w)[None, :] + x0 < xl

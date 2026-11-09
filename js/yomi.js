@@ -19,8 +19,9 @@
  */
 const Yomi = (() => {
   const REF_H = 720;
-  const GROUND = 0.8;      // linha do chão (fração da altura da tela)
-  const HERO_H = 0.3;      // altura do rōnin na tela (fração)
+  const GROUND = 0.66;     // linha dos pés dos lutadores (fração da altura da tela)
+  const ZOOM = 0.5;        // câmera aberta: lutadores pequenos numa clareira ampla, como num plano de cinema
+  const HERO_H = 0.3 * ZOOM; // altura do rōnin na tela (fração)
   const LEVEL_END = 7000;
 
   /* ------------------------------- inimigos ------------------------------- */
@@ -80,10 +81,10 @@ const Yomi = (() => {
 
   /** Trechos do caminho (cenário e letreiro). */
   const ZONES = [
-    { x: 0, name: 'Floresta de Kiriyama', sub: 'Era Meiji, 1877', mid: ['forest_mixed', 'bamboo_grove', 'forest_broadleaf', 'forest_bamboo_pine', 'bonsai_pine'], near: ['bush_a', 'rock_moss', 'fern', 'rock_big', 'bush_round'] },
-    { x: 2400, name: 'Aldeia abandonada', sub: 'As casas ainda cheiram a fumaça', mid: ['ss_house_long', 'ss_house_tile', 'bonsai_pine', 'ss_house_long', 'ss_house_tile'], near: ['ss_lantern', 'barrel', 'crate', 'hay', 'ss_lantern'] },
+    { x: 0, name: 'Floresta de Kiriyama', sub: 'Era Meiji, 1877', mid: ['forest_mixed', 'ss_grove', 'bamboo_grove', 'forest_broadleaf', 'forest_bamboo_pine', 'bonsai_pine'], near: ['bush_a', 'rock_moss', 'fern', 'rock_big', 'bush_round'] },
+    { x: 2400, name: 'Aldeia abandonada', sub: 'As casas ainda cheiram a fumaça', mid: ['ss_gate', 'house_thatch2', 'bonsai_pine', 'ss_gate', 'house_tile'], near: ['ss_lantern', 'barrel', 'crate', 'hay', 'ss_lantern'] },
     { x: 4400, name: 'Bambuzal dos mortos', sub: 'O vento sopra entre os túmulos', mid: ['bamboo_grove', 'forest_bamboo_pine', 'bamboo_grove', 'forest_dark'], near: ['bamboo', 'rock_tall', 'grass_tall', 'lantern2'] },
-    { x: 5700, name: 'Portal do Santuário', sub: 'Onde o ceifador espera', mid: ['torii', 'forest_pines', 'mini_shrine', 'forest_dark', 'bonsai_pine'], near: ['ss_lantern', 'ss_lantern', 'rock_flat', 'rock_moss'] },
+    { x: 5700, name: 'Portal do Santuário', sub: 'Onde o ceifador espera', mid: ['ss_bell', 'torii', 'ss_grove', 'forest_pines', 'ss_bell'], near: ['ss_lantern', 'ss_lantern', 'rock_flat', 'rock_moss'] },
   ];
 
   /* ------------------------------ utilidades ------------------------------ */
@@ -95,27 +96,32 @@ const Yomi = (() => {
   function buildScenery() {
     seed = 77;
     const far = [], mid = [], near = [], fore = [], tufts = [];
-    for (let x = -400; x < LEVEL_END + 1200; x += 140 + rnd() * 120) {
+    let lastPlate = -9999;
+    for (let x = -3200; x < LEVEL_END + 3200; x += 240 + rnd() * 200) {
       far.push({ x, name: ['forest_dark', 'forest_pines', 'pine', 'forest_mixed'][Math.floor(rnd() * 4)], s: 1.9 + rnd() * 0.6, dy: rnd() * 30 });
     }
-    for (let x = -300; x < LEVEL_END + 900; x += 230 + rnd() * 200) {
+    for (let x = -3200; x < LEVEL_END + 3200; x += 230 + rnd() * 200) {
       const z = zoneAt(x / 0.62);
-      const name = z.mid[Math.floor(rnd() * z.mid.length)];
+      let name = z.mid[Math.floor(rnd() * z.mid.length)];
+      if (name.startsWith('ss_') && x - lastPlate < 1500) name = ['forest_mixed', 'forest_broadleaf', 'forest_pines', 'bamboo_grove'][Math.floor(rnd() * 4)];
       const side = name.startsWith('ss_');
-      mid.push({ x, name, s: (side ? 0.62 : 1.35) + rnd() * (side ? 0.12 : 0.35), dy: rnd() * 18, flip: !side && rnd() < 0.5 });
+      if (side) lastPlate = x;
+      // painéis de cena da folha de perfil: grandes, um por vez (sem sobrepor)
+      mid.push({ x, name, s: (side ? 0.82 : 1.35) + rnd() * (side ? 0.1 : 0.35), dy: side ? 34 : rnd() * 18, flip: !side && rnd() < 0.5 });
+      if (side) x += ATLAS[name].w * 0.55;
     }
-    for (let x = -200; x < LEVEL_END + 600; x += 160 + rnd() * 260) {
+    for (let x = -2400; x < LEVEL_END + 2400; x += 160 + rnd() * 260) {
       const z = zoneAt(x);
       const nn = z.near[Math.floor(rnd() * z.near.length)];
       near.push({ x, name: nn, s: nn.startsWith('ss_') ? 0.85 + rnd() * 0.15 : 1.25 + rnd() * 0.4, flip: rnd() < 0.5 });
     }
-    for (let x = -200; x < LEVEL_END * 1.6 + 800; x += 420 + rnd() * 600) {
-      const big = rnd() < 0.14;
-      fore.push({ x, name: big ? 'pine' : ['grass_tall', 'fern', 'fern2', 'grass_tall'][Math.floor(rnd() * 4)], s: big ? 5 + rnd() : 2.4 + rnd() * 1.1, big, flip: rnd() < 0.5 });
+    for (let x = -3000; x < LEVEL_END * 1.6 + 3000; x += 180 + rnd() * 360) {
+      const big = rnd() < 0.25; // moita grande escura rente à câmera
+      fore.push({ x, name: big ? 'bush_dark' : ['grass_tall', 'fern', 'fern2', 'grass_tall'][Math.floor(rnd() * 4)], s: big ? 3.4 + rnd() : 2.4 + rnd() * 1.1, big, flip: rnd() < 0.5 });
     }
     for (let x = -300; x < LEVEL_END + 600; x += 18 + rnd() * 40) tufts.push({ x, dy: rnd(), h: 6 + rnd() * 10, l: rnd() });
     const beams = [];
-    for (let x = -200; x < LEVEL_END * 0.3 + 1600; x += 220 + rnd() * 260) beams.push({ x, w: 30 + rnd() * 90, a: 0.05 + rnd() * 0.08, ph: rnd() * 6 });
+    for (let x = -2400; x < LEVEL_END * 0.3 + 2400; x += 220 + rnd() * 260) beams.push({ x, w: 30 + rnd() * 90, a: 0.05 + rnd() * 0.08, ph: rnd() * 6 });
     return { far, mid, near, fore, tufts, beams };
   }
 
@@ -148,7 +154,7 @@ const Yomi = (() => {
     const T = TYPES[type];
     const h = w.hero;
     w.enemies.push({
-      type, T, x: h.x + side * (760 + Math.random() * 80), face: -side, hp: T.hp, maxHp: T.hp,
+      type, T, x: h.x + side * ((w.viewHalf || 900) + 120 + Math.random() * 100), face: -side, hp: T.hp, maxHp: T.hp,
       state: 'enter', t: -delay, atk: null, chain: 0, flash: 0, deadT: 0, stride: 0, vx: 0,
       cool: 0.6 + Math.random() * 0.8, guardT: 0, dangerT: 0,
     });
@@ -374,7 +380,7 @@ const Yomi = (() => {
         if (e.t < 0) return;
         e.face = Math.sign(dist) || 1;
         walk(e.face, T.speed * 1.3);
-        if (ad < 520) { e.state = 'approach'; e.t = 0; }
+        if (ad < 700) { e.state = 'approach'; e.t = 0; }
         break;
       case 'approach': {
         e.face = Math.sign(dist) || e.face;
@@ -501,6 +507,44 @@ const Yomi = (() => {
 
   /* -------------------------------- desenho -------------------------------- */
   let grain = null;
+  let farCache = null;   // mata distante pré-desenhada
+  let groundPair = null; // textura da clareira (gerada uma vez)
+
+  /**
+   * Terra da clareira, gerada (repete sem emenda na horizontal): manchas claras e
+   * escuras bem suaves, pedrinhas, marcas de pegadas e tufos de capim — mais
+   * densos no alto (o fundo, longe) e na faixa de baixo (beira, perto da câmera).
+   */
+  function makeGround() {
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#8c8c86';
+    g.fillRect(0, 0, 1024, 256);
+    let sd = 991;
+    const r = () => ((sd = (sd * 16807) % 2147483647) - 1) / 2147483646;
+    const blob = (x, y, rad, col) => {
+      for (const ox of [-1024, 0, 1024]) {
+        const gr = g.createRadialGradient(x + ox, y, 0, x + ox, y, rad);
+        gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr;
+        g.fillRect(x + ox - rad, y - rad, rad * 2, rad * 2);
+      }
+    };
+    for (let i = 0; i < 70; i++) blob(r() * 1024, r() * 256, 30 + r() * 90, r() < 0.5 ? 'rgba(255,255,250,0.10)' : 'rgba(20,20,18,0.12)');
+    for (let i = 0; i < 260; i++) { // pedrinhas
+      const x = r() * 1024, y = r() * 256, s = 1 + r() * 2.5;
+      g.fillStyle = 'rgba(40,40,36,0.5)'; g.beginPath(); g.ellipse(x, y + 1, s * 1.4, s * 0.7, 0, 0, 7); g.fill();
+      g.fillStyle = 'rgba(200,200,192,0.35)'; g.beginPath(); g.ellipse(x - 0.5, y, s, s * 0.5, 0, 0, 7); g.fill();
+    }
+    g.strokeStyle = 'rgba(35,38,32,0.55)'; g.lineWidth = 1.2;
+    for (let i = 0; i < 900; i++) { // capim: mais no fundo e na beira de baixo
+      const y = r() < 0.5 ? r() * 60 : 190 + r() * 66;
+      const x = r() * 1024, h = 3 + r() * 9;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 5, y - h); g.stroke();
+    }
+    return c;
+  }
   function grainCanvas() {
     if (grain) return grain;
     grain = document.createElement('canvas');
@@ -554,9 +598,10 @@ const Yomi = (() => {
     return { rotate: face * (-0.14 * k1 * (1 - k2) + 0.16 * k2 + 0.38 * k3), sy: 1 - 0.24 * k2 - 0.16 * k3, dark: 0.5 * k3, alpha: 1 - clamp((t - 1.5) / 0.6, 0, 1) };
   }
 
-  function render(ctx, cam, w) {
+  function render(ctx0, cam, w) {
+    let ctx = ctx0;
     const W = cam.viewW, H = cam.viewH;
-    const k = (H / REF_H) * (1 + w.punch);
+    const k = (H / REF_H) * ZOOM * (1 + w.punch);
     const gy = H * GROUND;
     const shx = (Math.random() - 0.5) * w.shake, shy = (Math.random() - 0.5) * w.shake;
     const X = (x, p = 1) => (x - w.camX * p) * k + W / 2 + shx * p;
@@ -573,19 +618,49 @@ const Yomi = (() => {
     ctx.fillRect(0, 0, W, H);
 
     const S = w.scenery;
-    const drawLayer = (list, p, baseY, scaleK, fog, behind = true) => {
+    const drawLayer = (list, p, baseY, scaleK, fog, tone = null, cached = false) => {
       for (const o of list) {
-        const sx = X(o.x, p);
-        if (sx < -500 * k || sx > W + 500 * k) continue;
-        Sprites.draw(ctx, o.name, sx, baseY + (o.dy || 0) * k, o.s * scaleK * k, { flip: o.flip });
+        const sx = cached ? (o.x - w.camX * p) * k + W / 2 : X(o.x, p);
+        if (sx < -500 * k - W * 0.35 || sx > W + 500 * k + W * 0.35) continue;
+        if (tone && !o.name.startsWith('ss_')) {
+          // árvore do fundo vira silhueta no tom da distância (mata em névoa)
+          const m = ATLAS[o.name], sc = o.s * scaleK * k;
+          if (!m) continue;
+          ctx.save();
+          // a base (losango de chão do sprite isométrico) fica escondida atrás da clareira
+          ctx.translate(sx, baseY + (o.dy || 0) * k + m.h * sc * 0.22);
+          ctx.scale(o.flip ? -1 : 1, 1);
+          ctx.drawImage(Sprites.tinted(o.name, tone), -m.ax * sc, -m.ay * sc, m.w * sc, m.h * sc);
+          ctx.restore();
+        } else Sprites.draw(ctx, o.name, sx, baseY + (o.dy || 0) * k, o.s * scaleK * k, { flip: o.flip });
       }
       if (fog) {
         ctx.fillStyle = `rgba(200,202,196,${fog})`;
-        ctx.fillRect(0, 0, W, H);
+        if (cached) ctx.fillRect(-W, 0, W * 3, H);
+        else ctx.fillRect(0, 0, W, H);
       }
     };
     // camada distante (bem pequena e lavada pela névoa)
-    drawLayer(S.far, 0.3, gy - 120 * k, 0.95, 0.5);
+    w.viewHalf = W / 2 / k;
+    const gTop = gy - H * 0.11, gBot = H * 0.95; // a clareira: do fundo (gTop) até rente à câmera
+    // mata distante: muda devagar (paralaxe 0,3), então fica pré-desenhada com margem
+    // e só é refeita quando a câmera sai dela
+    const M = W * 0.3;
+    let fc = farCache;
+    if (!fc || fc.W !== W || fc.H !== H || fc.k !== k || Math.abs((w.camX - fc.camX) * 0.3 * k) > M * 0.9) {
+      fc = farCache = fc && fc.W === W && fc.H === H ? fc : { c: document.createElement('canvas'), W, H };
+      fc.c.width = Math.ceil(W + M * 2); fc.c.height = Math.ceil(gTop + 4);
+      fc.k = k; fc.camX = w.camX;
+      const fctx = fc.c.getContext('2d');
+      fctx.clearRect(0, 0, fc.c.width, fc.c.height);
+      const saved = ctx;
+      ctx = fctx; // drawLayer desenha no contexto atual
+      fctx.translate(M, 0);
+      drawLayer(S.far, 0.3, gTop - 6 * k, 2.1, 0.35, '#8a8d86', true);
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx = saved;
+    }
+    ctx.drawImage(fc.c, -M - (w.camX - fc.camX) * 0.3 * k, 0);
     // feixes de luz entre as árvores
     ctx.globalCompositeOperation = 'lighter';
     for (const b of S.beams) {
@@ -606,23 +681,36 @@ const Yomi = (() => {
     }
     ctx.globalCompositeOperation = 'source-over';
     // camada do meio (casas, mata) com névoa leve
-    drawLayer(S.mid, 0.62, gy - 42 * k, 1, 0.22);
+    drawLayer(S.mid, 0.62, gTop + 14 * k, 1.55, 0.18, '#4b4e48');
 
-    // chão: ladrilho de terra da folha de perfil (espelhado a cada repetição para esconder a emenda)
-    const G = ATLAS.ss_ground, gimg = Assets.images.ss_ground;
-    const gTop = gy - 46 * k, gBot = H * 0.94;
-    const gk = (gBot - gTop) / G.h, tw = (G.w * gk) / k;
+    // chão: a clareira em perspectiva. O ladrilho de terra (espelhado aos pares) é
+    // desenhado em faixas horizontais; cada faixa anda com a sua paralaxe — devagar
+    // no fundo, rápido rente à câmera — e é mais larga quanto mais perto (2.5D).
+    const gimg = true;
     ctx.fillStyle = '#2a2a28';
     ctx.fillRect(0, gTop, W, H - gTop);
     if (gimg) {
-      const i0 = Math.floor((w.camX - W / 2 / k) / tw) - 1, i1 = Math.ceil((w.camX + W / 2 / k) / tw) + 1;
-      for (let i = i0; i <= i1; i++) {
-        const sx = X(i * tw);
-        ctx.save();
-        if (i & 1) { ctx.translate(sx + tw * k, gTop); ctx.scale(-1, 1); } else ctx.translate(sx, gTop);
-        ctx.drawImage(gimg, 0, 0, tw * k + 1, gBot - gTop);
-        ctx.restore();
+      if (!groundPair) groundPair = makeGround();
+      const N = 22, band = (gBot - gTop) / N, tg = (gy - gTop) / (gBot - gTop);
+      const GW = groundPair.width, GH = groundPair.height;
+      const pairW = GW * ((gBot - gTop) / GH) * 1.4; // largura do ladrilho na linha dos lutadores
+      for (let j = 0; j < N; j++) {
+        const t = (j + 0.5) / N;
+        const p = clamp(1 + (t - tg) * 1.1, 0.55, 1.6);
+        const pw = pairW * p;
+        const off = ((((w.camX * k * p - W / 2) % pw) + pw) % pw);
+        for (let x = -off; x < W; x += pw) {
+          ctx.drawImage(groundPair, 0, (j / N) * GH, GW, GH / N, x, gTop + j * band, pw + 1, band + 1);
+        }
       }
+      // névoa no fundo da clareira, sombra rente à câmera
+      const fog = ctx.createLinearGradient(0, gTop, 0, gBot);
+      fog.addColorStop(0, 'rgba(200,202,196,0.55)');
+      fog.addColorStop(0.35, 'rgba(200,202,196,0.08)');
+      fog.addColorStop(0.75, 'rgba(0,0,0,0.05)');
+      fog.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.fillStyle = fog;
+      ctx.fillRect(0, gTop, W, gBot - gTop);
     }
     // poças de "tinta" (sangue) no chão
     for (const f of w.fx) {
@@ -633,7 +721,7 @@ const Yomi = (() => {
       ctx.fill();
     }
     // objetos da beira do caminho (atrás dos lutadores)
-    drawLayer(S.near, 1, gy - 30 * k, 1, 0);
+    drawLayer(S.near, 0.92, gTop + (gy - gTop) * 0.45, 1.2, 0);
 
     // lutadores: sombra, corpo
     const shadow = (x, r) => {
@@ -759,9 +847,9 @@ const Yomi = (() => {
       if (sx < -600 * k || sx > W + 600 * k) continue;
       const m = ATLAS[o.name];
       if (!m) continue;
-      const sc = o.s * k;
+      const sc = (o.s * k) / ZOOM * 0.85;
       ctx.save();
-      ctx.translate(sx, o.big ? H * 1.45 : H * 1.12); // só o topo aparece: a borda reta do recorte fica fora da tela
+      ctx.translate(sx, o.big ? H * 1.16 : H * 1.12); // só o topo aparece: a borda reta do recorte fica fora da tela
       ctx.scale(o.flip ? -1 : 1, 1);
       // tronco grande que passa pelo meio da luta fica translúcido (não esconde o duelo)
       ctx.globalAlpha = o.big ? clamp(Math.abs(sx - W / 2) / (W * 0.32), 0.18, 0.95) : 0.95;

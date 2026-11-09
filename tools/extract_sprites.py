@@ -3,7 +3,7 @@ Extrai os sprites das folhas com fundo verde (chroma key) e gera:
   assets/sprites/<nome>.png  — PNG com transparência, já recortado
   js/atlas.js                — tamanhos e ponto de ancoragem (pés) de cada sprite
 
-Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg> <costas_oni_ronin.jpg> <costas_kunoichi.jpg> <costas_aldeoes.jpg> <floresta2.jpg>
+Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg> <costas_oni_ronin.jpg> <costas_kunoichi.jpg> <costas_aldeoes.jpg> <floresta2.jpg> <ronin_costas.png>
 
 Cada quadro é definido por um retângulo generoso na folha. Dentro dele mantemos
 o maior componente conectado e qualquer componente que NÃO toque a borda do
@@ -177,11 +177,20 @@ FRAMES = {
     'slope_path': (9, 468, 1258, 708, 1418, {'only_main': True}),
     'slope_roots': (9, 748, 1268, 972, 1418, {'only_main': True}),
     'slope_roots2': (9, 1242, 1188, 1502, 1422, {'only_main': True, 'clip': [(1242, 1188, 1330, 1250)]}),
+    # ---------------- Rōnin de costas (folha 10, pequena: recortada em escala 1) ----------------
+    'hero_back_idle': (10, 16, 114, 78, 233, {'scale': 1}),
+    'hero_back_walk1': (10, 80, 4, 150, 118, {'scale': 1}),
+    'hero_back_walk2': (10, 158, 4, 228, 118, {'scale': 1}),
+    'hero_back_dash': (10, 346, 4, 428, 118, {'scale': 1}),
+    'hero_back_stance': (10, 438, 4, 506, 118, {'scale': 1}),
+    'hero_back_slash': (10, 520, 4, 602, 118, {'scale': 1}),
+    'hero_back_draw': (10, 230, 104, 306, 233, {'scale': 1}),
+    'hero_back_slash2': (10, 148, 114, 232, 233, {'scale': 1}),
 }
 
 # Cor de fundo de cada folha (as duas primeiras são verde-chroma, a terceira verde-claro).
 SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9), 5: (12, 226, 8),
-            6: (4, 234, 1), 7: (9, 218, 2), 8: (11, 219, 3), 9: (174, 219, 162)}
+            6: (4, 234, 1), 7: (9, 218, 2), 8: (11, 219, 3), 9: (174, 219, 162), 10: (12, 228, 9)}
 
 
 def key(rgb, bg=BG):
@@ -342,11 +351,40 @@ def hair_to_black(img):
             for dx in (-2, -1, 0, 1, 2):
                 count += np.roll(np.roll(hf, dy, 0), dx, 1)
         hair = hair | (red & (count >= 9))
+    # contorno do cabelo: borda alaranjada/amarelada (mistura do ruivo com o fundo verde)
+    ring = hair.copy()
+    for dy in (-2, -1, 0, 1, 2):
+        for dx in (-2, -1, 0, 1, 2):
+            ring |= np.roll(np.roll(hair, dy, 0), dx, 1)
+    A = alpha[..., 0]
+    edge = A < 250
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            edge |= np.roll(np.roll(A < 40, dy, 0), dx, 1)
+    hair |= ring & edge & (hue >= 12) & (hue <= 100) & (sat > 0.18) & rows & (A > 0)
     lum = 0.3 * r + 0.59 * g + 0.11 * b
     v = lum * 0.38 + 8
     black = np.stack([v * 0.95, v * 0.97, v * 1.12], -1)
     out = np.where(hair[..., None], black, rgb)
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), alpha], -1).astype(np.uint8), 'RGBA')
+
+
+def darken_fringe(img):
+    """Escurece a franja amarelada/oliva colada na borda transparente (parte de cima)."""
+    a = np.asarray(img).astype(float)
+    rgb, A = a[..., :3], a[..., 3]
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    edge = np.zeros(A.shape, bool)
+    for dy in (-2, -1, 0, 1, 2):
+        for dx in (-2, -1, 0, 1, 2):
+            edge |= np.roll(np.roll(A < 60, dy, 0), dx, 1)
+    rows = np.arange(A.shape[0])[:, None] < A.shape[0] * 0.55
+    warm = (r > b + 18) & (g > b + 10) & (A > 0)
+    m = edge & warm & rows
+    lum = 0.3 * r + 0.59 * g + 0.11 * b
+    v = lum * 0.38 + 8
+    out = np.where(m[..., None], np.stack([v * 0.95, v * 0.97, v * 1.12], -1), rgb)
+    return Image.fromarray(np.concatenate([np.clip(out, 0, 255), A[..., None]], -1).astype(np.uint8), 'RGBA')
 
 
 def main(*paths):
@@ -363,12 +401,15 @@ def main(*paths):
         if name in ANCHOR_X:
             ax = ANCHOR_X[name] / SCALE
         w, h = img.size
-        nw, nh = max(1, round(w * SCALE)), max(1, round(h * SCALE))
+        sc = opts.get('scale', SCALE)
+        nw, nh = max(1, round(w * sc)), max(1, round(h * sc))
         img = img.resize((nw, nh), Image.LANCZOS)
         if name.startswith('hero_'):
             img = hair_to_black(img)  # o rōnin agora tem cabelo preto
+        if name.startswith('hero_back_'):
+            img = darken_fringe(img)  # folha pequena: contorno dourado na borda do cabelo
         img.save(os.path.join(OUT, name + '.png'), optimize=True)
-        atlas[name] = {'w': nw, 'h': nh, 'ax': round(ax * SCALE, 1), 'ay': round(ay * SCALE, 1)}
+        atlas[name] = {'w': nw, 'h': nh, 'ax': round(ax * sc, 1), 'ay': round(ay * sc, 1)}
         print(f'{name:14s} {nw:4d}x{nh:<4d} anchor=({atlas[name]["ax"]}, {atlas[name]["ay"]})')
     for src in RECOLOR_SOURCES:
         base = Image.open(os.path.join(OUT, src + '.png'))

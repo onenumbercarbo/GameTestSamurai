@@ -223,7 +223,8 @@ class Player extends Actor {
     const S = CONFIG.SPRITE_SCALE;
     for (const a of this.afterimages) {
       const g = cam.worldToScreen(a.x, a.y);
-      Sprites.draw(ctx, 'hero_dash', g.x, g.y, S * cam.scale, {
+      const away = this.facingAway;
+      Sprites.draw(ctx, away ? 'hero_back_dash' : 'hero_dash', g.x, g.y, S * cam.scale * (away ? 1.4 : 1), {
         flip: a.flip, alpha: (a.life / 0.25) * 0.5, tint: '#ff4a3a', tintAmount: 0.85,
       });
     }

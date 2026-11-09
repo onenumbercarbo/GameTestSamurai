@@ -12,6 +12,10 @@ const BACK_SPRITES = {
   ronin_low: ['ronin_back', 1.38], ronin_dual: ['ronin_back_dual', 1.38], ronin_raise: ['ronin_back_raise', 1.38],
   kuno_stance: ['kuno_back', 1.28], kuno_fist: ['kuno_back2', 1.28], kuno_slash: ['kuno_back2', 1.28],
   bandit_dance: ['bandit_back_dance', 1], bandit_dance2: ['bandit_back_dance', 1],
+  // rōnin (folha pequena: recortada em escala 1, por isso fator ~1,36)
+  hero_idle: ['hero_back_idle', 1.4], hero_walk1: ['hero_back_walk1', 1.4], hero_walk2: ['hero_back_walk2', 1.4],
+  hero_dash: ['hero_back_dash', 1.4], hero_stance: ['hero_back_stance', 1.4], hero_draw: ['hero_back_draw', 1.4],
+  hero_slash1: ['hero_back_slash', 1.4], hero_slash2: ['hero_back_slash2', 1.4],
 };
 /** Variações para animar a caminhada de costas (alterna quadros parecidos). */
 const BACK_WALK = {
@@ -35,7 +39,6 @@ class Actor {
     this.facing = 0;
     this.animTime = 0;
     this.stride = 0;       // distância percorrida: os passos acompanham a velocidade
-    this._sx = 1;          // escala X atual (virada suave entre esquerda e direita)
     this._prev = null;     // quadro anterior, para a transição curta entre poses
     this._fade = 1;
     this._lastT = null;
@@ -111,12 +114,10 @@ class Actor {
       if (walk && Math.hypot(this.vx, this.vy) > 0.3) name = walk[Math.floor(this.stride * 1.6) % walk.length];
     }
 
-    // virada suave
-    const target = (opts.flip ?? this.flip) ? -1 : 1;
-    const turn = 14 * dt;
-    this._sx = this._sx < target ? Math.min(target, this._sx + turn) : Math.max(target, this._sx - turn);
-    if (dt === 0) this._sx = target;
-    const sx = Math.sign(this._sx || target) * Math.max(0.2, Math.abs(this._sx));
+    // Virada: espelho instantâneo (achatar o sprite parecia uma folha de papel girando).
+    // A troca de lado ganha só a transição cruzada de quadros, abaixo.
+    const flipNow = opts.flip ?? this.flip;
+    const sx = flipNow ? -1 : 1;
 
     // balanço e inclinação ao andar
     const sp = Math.hypot(this.vx, this.vy);
@@ -137,15 +138,15 @@ class Actor {
     const alpha = opts.alpha ?? 1;
     const fullScale = scale * k * cam.scale;
 
-    // transição entre quadros
-    if (!this._prev || this._prev.name !== name) {
+    // transição entre quadros (inclui a troca de lado e frente/costas)
+    if (!this._prev || this._prev.name !== name || this._prev.sx !== sx) {
       if (this._prev && this._fade >= 1) this._from = { ...this._prev };
       this._fade = this._prev ? 0 : 1;
-      this._prev = { name, scale: fullScale };
+      this._prev = { name, scale: fullScale, sx };
     }
-    this._fade = Math.min(1, this._fade + dt / 0.07);
+    this._fade = Math.min(1, this._fade + dt / 0.08);
     if (this._fade < 1 && this._from) {
-      Sprites.draw(ctx, this._from.name, g.x, g.y, this._from.scale, { ...base, alpha: alpha * (1 - this._fade) });
+      Sprites.draw(ctx, this._from.name, g.x, g.y, this._from.scale, { ...base, sx: this._from.sx, alpha: alpha * (1 - this._fade) });
     }
     Sprites.draw(ctx, name, g.x, g.y, fullScale, { ...base, alpha: this._fade < 1 ? alpha * (0.35 + 0.65 * this._fade) : alpha });
   }

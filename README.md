@@ -31,7 +31,7 @@ O golpe sai na direção em que você conduz o rōnin (WASD). Uma assistência d
 ## Animação
 
 - **Poses de costas:** o oni, o rōnin de palha, a kunoichi e os bandidos usam a pose de costas ao andar ou atacar para longe da câmera (`BACK_SPRITES` em `js/actor.js`). Reféns podem estar ajoelhados de costas, e os libertados vão embora caminhando.
-- **Movimento fluido:** virada suave em vez do espelho instantâneo, transição de ~70 ms entre poses, passos sincronizados com a velocidade, leve balanço e inclinação ao correr.
+- **Movimento fluido:** o rōnin também tem poses de costas (andar, dash, golpes); troca de lado e de frente/costas com transição cruzada de ~80 ms, passos sincronizados com a velocidade, leve balanço e inclinação ao correr.
 
 ## Arena do Gendō
 

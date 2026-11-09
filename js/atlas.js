@@ -853,6 +853,54 @@ const ATLAS = {
   "ax": 54.8,
   "ay": 111.0
  },
+ "hero_back_idle": {
+  "w": 54,
+  "h": 99,
+  "ax": 26.5,
+  "ay": 97.0
+ },
+ "hero_back_walk1": {
+  "w": 61,
+  "h": 108,
+  "ax": 35.5,
+  "ay": 106.0
+ },
+ "hero_back_walk2": {
+  "w": 60,
+  "h": 110,
+  "ax": 36.5,
+  "ay": 109.0
+ },
+ "hero_back_dash": {
+  "w": 75,
+  "h": 103,
+  "ax": 36.0,
+  "ay": 102.0
+ },
+ "hero_back_stance": {
+  "w": 66,
+  "h": 104,
+  "ax": 35.0,
+  "ay": 103.0
+ },
+ "hero_back_slash": {
+  "w": 77,
+  "h": 106,
+  "ax": 27.5,
+  "ay": 105.0
+ },
+ "hero_back_draw": {
+  "w": 74,
+  "h": 114,
+  "ax": 31.0,
+  "ay": 112.0
+ },
+ "hero_back_slash2": {
+  "w": 76,
+  "h": 99,
+  "ax": 33.5,
+  "ay": 97.0
+ },
  "gray_idle": {
   "w": 79,
   "h": 129,

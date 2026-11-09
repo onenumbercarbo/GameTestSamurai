@@ -123,15 +123,18 @@ class Cutscene {
   input.onFirstGesture = () => Sfx.unlock();
 
   const SAVE_KEY = 'ronin-reliquia-save';
-  // Progresso salvo: { stage, items }. Aceita o formato antigo (só o número da vila).
+  // Progresso salvo: { seed, progress, items }. progress = vilas libertadas (0..4).
+  // Aceita os formatos antigos (número da vila ou { stage, items }).
   const loadSave = () => {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return { stage: 0, items: [] };
+      if (!raw) return { seed: 0, progress: 0, items: [] };
       const v = JSON.parse(raw);
-      if (typeof v === 'number') return { stage: v, items: [] };
-      return { stage: v.stage || 0, items: Array.isArray(v.items) ? v.items.filter((i) => ITEMS[i]) : [] };
-    } catch { return { stage: 0, items: [] }; }
+      if (typeof v === 'number') return { seed: 0, progress: Math.min(v, 4), items: [] };
+      const items = Array.isArray(v.items) ? v.items.filter((i) => ITEMS[i]) : [];
+      const progress = Math.min(4, v.progress ?? v.stage ?? 0);
+      return { seed: v.seed || 0, progress, items, started: !!v.seed || progress > 0 };
+    } catch { return { seed: 0, progress: 0, items: [] }; }
   };
   const writeSave = (v) => {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(v)); } catch { /* sem armazenamento: tudo bem */ }
@@ -158,62 +161,108 @@ class Cutscene {
   /* ------------------------------ criação do mundo ------------------------------ */
 
   /**
-   * Cria o mundo de uma vila. Sem semente, sorteia uma nova: cada entrada
-   * (inclusive tentar de novo após morrer) gera um mapa diferente.
+   * Cria a REGIÃO inteira (todas as vilas e estradas num mapa só).
+   *  progress: quantas vilas já foram libertadas (0..4). O rōnin começa na vila
+   *  `progress` (ou no santuário, se as quatro já caíram); tudo antes disso já
+   *  está limpo. A semente vem do save: a jornada mantém o mesmo mundo.
    */
-  function createWorld(index, hp, seed = Math.floor(Math.random() * 1e9)) {
-    const stage = buildStage(index, seed);
+  function createWorld(progress = 0, hp, seed = game.seed || 1) {
+    const stage = buildRegion(seed);
     const w = {
       stage,
-      index,
       level: new Level(stage),
+      zones: stage.zones,
       encounters: stage.waves.map((e) => ({ ...e, state: 'idle' })),
-      sealFound: !stage.seal,
-      sealWarned: 0,
       camera,
       effects: new Effects(),
       enemies: [],
       projectiles: [],
       pickups: [],
       spawnQueue: [],
-      boss: null,
-      gate: null,
+      bosses: [],
+      fightBoss: null,
       hitStop: 0,
       timeScale: 1,
       slowmoLeft: 0,
       attackTokens: 0,
       stats: game.stats,
       cutscene: null,
-      waveIndex: -1,
+      dialog: null,
       activeArena: null,
-      bossStarted: false,
       bossFight: false,
-      exitOpen: false,
       banner: null,
       damageVignette: 0,
       time: 0,
       smokeTimer: 0,
+      progress,
     };
     w.level.world = w;
-    w.player = new Player(w, stage.start[0], stage.start[1], game.items);
+    for (const z of w.zones) {
+      z.done = false;
+      z.talked = z.kind !== 'village';
+      z.entered = false;
+    }
+
+    // Ponto de partida: a vila atual (ou o santuário).
+    const cpZone = progress < 4 ? w.zones.find((z) => z.village === progress) : w.zones[w.zones.length - 1];
+    const startPt = progress === 0 ? stage.start : [cpZone.start[0] + 2.5, cpZone.start[1]];
+    w.player = new Player(w, startPt[0], startPt[1], game.items);
     if (hp !== undefined) w.player.hp = Math.min(hp, w.player.maxHp);
 
-    if (stage.exit) w.gate = new ToriiGate(stage.exit[0], stage.exit[1], w.level);
-    if (stage.boss) {
-      w.boss = stage.boss.mini
-        ? new MiniBoss(w, stage.boss.spawn[0], stage.boss.spawn[1], stage.boss.id)
-        : new Boss(w, stage.boss.spawn[0], stage.boss.spawn[1]);
+    // Guardiões das vilas e o Gendō.
+    for (const z of w.zones) {
+      if (!z.boss) continue;
+      const B = z.boss;
+      const b = B.mini ? new MiniBoss(w, B.spawn[0], B.spawn[1], B.id) : new Boss(w, B.spawn[0], B.spawn[1]);
+      b.data = B;
+      b.zone = z;
+      z.bossObj = b;
+      z.bossStarted = false;
+      w.bosses.push(b);
+    }
+    Object.defineProperty(w, 'zone', { get: () => zoneAt(w, w.player.x) });
+    // "o boss" do momento: o que está lutando, senão o guardião da zona atual
+    Object.defineProperty(w, 'boss', { get: () => w.fightBoss || (w.zone.bossObj && w.zone.bossObj.alive ? w.zone.bossObj : null) });
+
+    // Construções novas da folha de vila, espalhadas perto do centro de cada vila.
+    const L = w.level;
+    const rndX = makeRng(seed * 3 + 11);
+    for (const z of w.zones) {
+      if (!z.extras) continue;
+      for (const type of z.extras) {
+        for (let k = 0; k < 60; k++) {
+          const a = rndX() * Math.PI * 2, r = 5 + rndX() * 20;
+          const x = z.townCenter[0] + Math.cos(a) * r, y = z.townCenter[1] + Math.sin(a) * r * 0.8;
+          if (x < z.x0 + 4 || x > z.x1 - 4 || y < 3 || y > L.H - 3) continue;
+          const pr = new Prop(type, x, y);
+          const b = pr.box;
+          let ok = true;
+          for (let j = Math.floor(b.y0 - 0.4); j <= Math.floor(b.y1 + 0.4) && ok; j++) {
+            for (let i = Math.floor(b.x0 - 0.4); i <= Math.floor(b.x1 + 0.4); i++) {
+              const tx = i + 0.5, ty = j + 0.5;
+              if (L.clearAt(tx, ty) || L.tileAt(tx, ty) !== T_GRASS || !L.isFree(tx, ty, 0.2)) { ok = false; break; }
+            }
+          }
+          if (!ok || L.nearPath(x, y, 2.2)) continue;
+          // não cobre vegetação já plantada: remove a que estiver por baixo
+          const under = L.props.filter((q) => q.def.solid !== 'box' && q.x > b.x0 - 0.5 && q.x < b.x1 + 0.5 && q.y > b.y0 - 0.5 && q.y < b.y1 + 0.5 && !q.def.breakable);
+          if (under.length) {
+            L.props = L.props.filter((q) => !under.includes(q));
+            L._solids = null;
+            for (const q of under) L.unmarkRegion(q.box);
+          }
+          L.addProp(type, x, y);
+          break;
+        }
+      }
     }
 
     w.chests = [];
     w.campfires = [];
-    // Baús de tesouro (itens já coletados em outra tentativa não reaparecem).
+    // Baús de tesouro (itens já coletados viram provisões).
     for (const l of stage.loot || []) {
-      const chest = l[0] === 'seal' ? new Chest(w, l[1], l[2], 'seal')
-        : l[0] === 'food' ? new Chest(w, l[1], l[2], 'food')
-          : game.items.includes(l[1]) ? new Chest(w, l[2], l[3], 'food') : new Chest(w, l[2], l[3], 'item', l[1]);
-      if (!chest) continue;
-      // O baú fica trancado pelo acampamento de guardiões mais próximo.
+      const chest = l[0] === 'food' ? new Chest(w, l[1], l[2], 'food')
+        : game.items.includes(l[1]) ? new Chest(w, l[2], l[3], 'food') : new Chest(w, l[2], l[3], 'item', l[1]);
       let best = null, bd = 7;
       for (const enc of w.encounters) {
         const d = Math.hypot(enc.center[0] - chest.x, enc.center[1] - chest.y);
@@ -222,28 +271,72 @@ class Cutscene {
       chest.encounter = best;
       w.chests.push(chest);
     }
-    placeCamps(w, index);
+    placeCamps(w, seed);
 
-    // Aldeões em perigo: um refém junto de cada emboscada do caminho.
+    // Reféns: um junto de cada emboscada do caminho (também nas estradas).
     w.villagers = [];
     w.encounters.filter((e) => !e.guard).forEach((enc) => {
       let q = w.level.randomFreeNear(enc.center[0], enc.center[1], 0.6, 1.8);
       for (let k = 0; k < 20 && !w.reachable(q.x, q.y); k++) q = w.level.randomFreeNear(enc.center[0], enc.center[1], 0.6, 2.6);
-      w.villagers.push(new Villager(w, q.x, q.y, Math.random() < 0.5, enc));
+      const v = new Villager(w, q.x, q.y, Math.random() < 0.5, enc);
+      v.zone = enc.zone;
+      w.villagers.push(v);
     });
-    w.villagersStart = w.villagers.length;
+
+    // Moradores: vida própria em cada vila (e o anfitrião que pede ajuda).
+    w.townsfolk = [];
+    const rndT = makeRng(seed * 5 + 3);
+    const kinds = Object.keys(TOWNSFOLK);
+    for (const z of w.zones) {
+      if (z.kind !== 'village') continue;
+      const gp = w.level.randomFreeNear(z.greeter[0], z.greeter[1], 0, 1.5);
+      const greeter = new Townsperson(w, gp.x, gp.y, z.talk.npc, z, { greeter: true });
+      z.greeterObj = greeter;
+      w.townsfolk.push(greeter);
+      let n = 0;
+      for (let k = 0; k < 60 && n < 10; k++) {
+        const q = w.level.randomFreeNear(z.townCenter[0] + (rndT() - 0.5) * 30, z.townCenter[1] + (rndT() - 0.5) * 24, 0, 3);
+        if (q.x < z.x0 + 2 || q.x > z.x1 - 2 || !w.reachable(q.x, q.y)) continue;
+        // longe dos acampamentos (nas emboscadas do caminho eles ficam por perto, acuados)
+        if (w.encounters.some((e) => e.zone === z.index && e.guard && Math.hypot(e.center[0] - q.x, e.center[1] - q.y) < e.r + 2)) continue;
+        w.townsfolk.push(new Townsperson(w, q.x, q.y, kinds[Math.floor(rndT() * kinds.length)], z));
+        n++;
+      }
+    }
+
+    // Zonas já libertadas (continuar / tentar de novo): limpa tudo antes do ponto de partida.
+    for (const z of w.zones) {
+      if (z.index >= cpZone.index) continue;
+      z.done = true;
+      z.talked = true;
+      z.entered = true;
+      L.removeTagged('barricade' + z.index);
+      if (z.bossObj) {
+        z.bossObj.alive = false;
+        z.bossObj.state = 'dying';
+        z.bossObj.deadT = 99;
+      }
+    }
+    for (const enc of w.encounters) {
+      if (enc.zone >= cpZone.index) continue;
+      enc.state = 'done';
+      for (const m of enc.members) { m.alive = false; m.state = 'dead'; m.deadT = 99; }
+    }
+    w.enemies = w.enemies.filter((e) => e.alive);
+    w.villagers = w.villagers.filter((v) => v.zone >= cpZone.index);
     w.rescuedHere = 0;
-    game.stats.villagersTotal = (game.stats.villagersTotal || 0) + w.villagers.length;
+    game.stats.villagersTotal = w.villagers.length + (game.stats.rescued || 0);
 
     // Névoa do mapa: tiles já vistos (para o minimapa).
     w.explored = new Uint8Array(stage.size[0] * stage.size[1]);
     w.exploreTimer = 0;
 
     w.targets = () => {
-      const t = w.enemies.filter((e) => e.alive);
-      if (w.boss && w.boss.alive) t.push(w.boss);
-      for (const p of w.projectiles) if (p.hostile) t.push(p);
-      for (const c of w.level.breakableTargets()) t.push(c);
+      const p = w.player;
+      const t = w.enemies.filter((e) => e.alive && Math.abs(e.x - p.x) < 16);
+      for (const b of w.bosses) if (b.alive && Math.abs(b.x - p.x) < 16) t.push(b);
+      for (const pr of w.projectiles) if (pr.hostile) t.push(pr);
+      for (const c of w.level.breakableTargets()) if (Math.abs(c.x - p.x) < 8) t.push(c);
       return t;
     };
 
@@ -255,19 +348,13 @@ class Cutscene {
         w.showBanner('Provisões dos bandidos', { sub: 'Onigiri e chá: +40 de vida', dur: 1.8, y: 0.24 });
         return;
       }
-      if (pk.kind === 'seal') {
-        w.sealFound = true;
-        Sfx.gong();
-        w.showBanner('Selo do portão', { kanji: '御札', sub: 'O torii que leva à próxima vila pode ser aberto', dur: 2.8, color: '#ffcf6a' });
-      } else {
-        const it = ITEMS[pk.id];
-        w.player.equip(pk.id);
-        game.items = w.player.items;
-        writeSave({ stage: game.stageIndex, items: game.items });
-        Sfx.gong();
-        w.effects.ring(pk.x, pk.y, 3, 1, '255,210,120');
-        w.showBanner(it.name, { kanji: '宝', sub: it.desc, dur: 3.4, color: '#ffcf6a' });
-      }
+      const it = ITEMS[pk.id];
+      w.player.equip(pk.id);
+      game.items = w.player.items;
+      writeSave({ seed: game.seed, progress: w.progress, items: game.items });
+      Sfx.gong();
+      w.effects.ring(pk.x, pk.y, 3, 1, '255,210,120');
+      w.showBanner(it.name, { kanji: '宝', sub: it.desc, dur: 3.4, color: '#ffcf6a' });
       w.camera.zoomPunch(0.06);
     };
     Object.defineProperty(w, 'inCombat', { get: () => !!(w.activeArena || w.bossFight) });
@@ -276,7 +363,16 @@ class Cutscene {
       w.banner = { text, t: 0, dur: opts.dur || 2.2, ...opts };
     };
 
-    /** Descobriram o acampamento: todos os bandidos do grupo partem para o ataque. */
+    /** Diálogo na parte de baixo da tela (o mundo pausa enquanto ele está aberto). */
+    w.startDialog = (lines, speakerObj, onEnd) => {
+      w.dialog = { lines, i: 0, t: 0, speaker: speakerObj, onEnd };
+    };
+
+    w.onTalked = (z) => {
+      z.talked = true;
+      w.showBanner(z.name, { kanji: z.kanji, sub: `Derrote ${z.bossObj ? z.bossObj.short : 'os bandidos'}, guardião da saída leste`, dur: 3, y: 0.3 });
+    };
+
     w.triggerEncounter = (enc) => {
       if (enc.state !== 'idle') return;
       enc.state = 'active';
@@ -287,28 +383,42 @@ class Cutscene {
       w.camera.shake(4);
     };
 
-    w.requiredLeft = () => w.encounters.filter((e) => !e.guard && e.state !== 'done').length;
+    w.nextZoneName = (z) => {
+      const n = w.zones.find((q) => q.index > z.index && q.kind !== 'road');
+      return n ? n.name : '';
+    };
 
     w.objectiveText = () => {
+      const z = w.zone;
       if (w.relic) return 'Recupere a relíquia no altar';
-      if (w.bossFight) return `Derrote ${w.boss.short}: leia os sinais vermelhos no chão e use o dash`;
+      if (w.bossFight && w.fightBoss) return `Derrote ${w.fightBoss.short}: leia os sinais vermelhos no chão e use o dash`;
       if (w.activeArena) {
         const n = w.activeArena.enc.members.filter((e) => e.alive).length;
         return `Derrote os bandidos: ${n} restante${n === 1 ? '' : 's'}`;
       }
-      if (w.exitOpen) return 'Siga até o portão torii';
-      if (stage.boss && !stage.boss.mini) return stage.objective;
-      const parts = [];
-      const req = w.requiredLeft();
-      if (req) parts.push(`${req} emboscada${req > 1 ? 's' : ''} no caminho`);
-      if (!w.sealFound) parts.push('encontre o baú com o selo do portão (explore o mapa)');
-      if (w.boss && w.boss.mini && w.boss.alive) parts.push(`derrote o guardião ${w.boss.short} perto do portão`);
-      return parts.length ? 'Falta: ' + parts.join(' · ') : stage.objective;
+      if (z.kind === 'village') {
+        if (!z.talked) return `Fale com ${z.talk.speaker} (!) na entrada da vila`;
+        if (!z.done) return `Derrote ${z.bossObj.short}, guardião da saída leste`;
+        return `Siga pela estrada até ${w.nextZoneName(z)}`;
+      }
+      if (z.kind === 'road') return `Siga a estrada até ${w.nextZoneName(z)}`;
+      return z.objective;
+    };
+
+    /** Para onde aponta a seta do HUD. */
+    w.objectivePoint = () => {
+      const z = w.zone;
+      if (w.inCombat || w.relic) return null;
+      if (z.kind === 'village' && !z.talked) return z.greeterObj;
+      if (z.kind === 'village' && !z.done && z.bossObj) return { x: z.boss.center[0], y: z.boss.center[1] };
+      if (z.kind === 'shrine') return z.bossObj && z.bossObj.alive ? { x: z.boss.center[0], y: z.boss.center[1] } : null;
+      const j = stage.junctions.find((q) => q[0] > w.player.x + 1);
+      return j ? { x: j[0] + 2, y: j[1] } : null;
     };
 
     w.onBossPhase2 = (b) => {
       w.showBanner(`${b.short} entra em fúria!`, { color: '#ff6a50', dur: 1.8, y: 0.25 });
-      stage.boss.adds.forEach((type, i) => {
+      (b.data.adds || []).forEach((type, i) => {
         const p = w.level.randomFreeNear(b.x, b.y, 3, 5.5, w.player);
         w.spawnQueue.push({ type, x: p.x, y: p.y, delay: 0.5 + i * 0.35, add: true });
       });
@@ -316,31 +426,52 @@ class Cutscene {
 
     w.onBossDefeated = (b) => {
       if (b.mini) {
-        // Guardião da vila: câmera lenta curta, reforços caem, sobra comida.
+        // Guardião caiu: a vila está livre, a barricada da estrada cai.
+        const z = b.zone;
         w.bossFight = false;
+        w.fightBoss = null;
         w.slowmoLeft = 1.1;
         w.camera.shake(10);
         for (const e of w.enemies) if (e.alive && e.isAdd) e.takeHit({ damage: 999, nx: 0, ny: 0, knockback: 0 });
         w.spawnQueue = [];
         Sfx.gong();
         w.pickups.push(new Pickup(w, b.x + 0.6, b.y + 0.4, 'onigiri'), new Pickup(w, b.x - 0.5, b.y + 0.7, 'onigiri'));
-        w.cutscene = new Cutscene([{ x: () => b.x, y: () => b.y, zoom: 2.4, rate: 2.5, dur: 1.8 }]);
-        w.showBanner(`${b.short} foi derrotado`, { kanji: '勝', sub: 'O guardião da vila caiu', dur: 2.4, color: '#ffcf6a' });
+        z.done = true;
+        w.progress = Math.max(w.progress, z.village + 1);
+        writeSave({ seed: game.seed, progress: w.progress, items: game.items });
+        w.rescuedHere = 0;
+        const j = stage.junctions.find((q) => q[2] === z.index);
+        w.cutscene = new Cutscene([
+          { x: () => b.x, y: () => b.y, zoom: 2.4, rate: 2.5, dur: 1.6 },
+          {
+            x: j[0], y: j[1], zoom: 1.6, rate: 2, dur: 1.8,
+            onStart: () => {
+              for (const pr of L.removeTagged('barricade' + z.index)) w.effects.smoke(pr.x, pr.y, 8, '150,120,80', 0.5);
+              w.effects.ring(j[0], j[1], 3, 0.8, '255,210,120');
+              Sfx.slam();
+              w.showBanner('A estrada está livre', { sub: `Caminho para ${w.nextZoneName(z)}`, dur: 2.4, color: '#ffcf6a' });
+            },
+          },
+        ], () => w.startDialog(z.talk.thanks, z.greeterObj, null));
+        w.showBanner(`${b.short} foi derrotado`, { kanji: '勝', sub: 'O guardião da vila caiu', dur: 2.2, color: '#ffcf6a' });
+        for (const t of w.townsfolk) if (t.zone === z) t.say(TOWN_LINES.happy[Math.floor(Math.random() * TOWN_LINES.happy.length)], 3);
         return;
       }
       w.bossFight = false;
+      w.fightBoss = null;
       w.slowmoLeft = 1.6;
       if (w.storm) { w.storm.strike(true); w.storm.calm(); }
       w.camera.shake(14);
-      for (const e of w.enemies) if (e.alive) e.takeHit({ damage: 999, nx: 0, ny: 0, knockback: 0 });
+      for (const e of w.enemies) if (e.alive && Math.hypot(e.x - b.x, e.y - b.y) < 20) e.takeHit({ damage: 999, nx: 0, ny: 0, knockback: 0 });
       w.spawnQueue = [];
       Sfx.roar();
+      const R = b.data.relic;
       w.cutscene = new Cutscene([
         { x: () => b.x, y: () => b.y, zoom: 2.5, rate: 2.5, dur: 2.6 },
         {
-          x: stage.boss.relic[0], y: stage.boss.relic[1], zoom: 1.7, rate: 2, dur: 1.8,
+          x: R[0], y: R[1], zoom: 1.7, rate: 2, dur: 1.8,
           onStart: () => {
-            w.relic = new Pickup(w, stage.boss.relic[0], stage.boss.relic[1], 'relic');
+            w.relic = new Pickup(w, R[0], R[1], 'relic');
             w.pickups.push(w.relic);
             w.effects.ring(w.relic.x, w.relic.y, 3, 1.2, '255,220,140');
             Sfx.gong();
@@ -360,42 +491,40 @@ class Cutscene {
       w.showBanner('Relíquia recuperada!', { color: '#ffcf6a', dur: 2.8 });
     };
 
-    // Tempestade e braseiros (arena do Gendō).
+    // Tempestade e braseiros (arena do Gendō): o clima só aparece no santuário.
     w.braziers = (stage.braziers || []).map(([x, y]) => new Brazier(w, x, y));
-    w.storm = stage.weather === 'storm' ? new Storm(w) : null;
+    w.storm = new Storm(w);
+    w.storm.intensity = 0;
+    w.storm.target = 0;
 
-    // Plano de abertura (estabelecimento): começa no marco da vila e viaja até o Rōnin.
-    const est = stage.establish;
-    if (w.storm && stage.boss) {
-      // Abertura cinematográfica: plano fechado logo atrás do rōnin, com a arena
-      // à frente; relâmpago; a câmera recua devagar revelando o piso e os braseiros.
-      const [ax, ay] = stage.boss.center;
-      const p0 = w.player;
-      const d = Math.hypot(ax - p0.x, ay - p0.y), ux = (ax - p0.x) / d, uy = (ay - p0.y) / d;
+    // Abertura: o anfitrião de Kiriyama vem até o rōnin pedir ajuda.
+    if (progress === 0) {
+      const z0 = w.zones[0], g = z0.greeterObj;
+      g.x = w.player.x + 5.5;
+      g.y = w.player.y - 1.5;
+      L.resolveCircle(g);
+      z0.entered = true;
       w.cutscene = new Cutscene([
         {
-          x: () => p0.x + ux * 1.1, y: () => p0.y + uy * 1.1, zoom: 3.3, rate: 3, dur: 2.2, cut: true,
-          onStart: () => w.showBanner(stage.name, { kanji: stage.kanji, sub: stage.objective, dur: 3.6, y: 0.74 }),
+          x: stage.establish[0], y: stage.establish[1], zoom: stage.establish[2], rate: 0.6, dur: 2.2, cut: true,
+          onStart: () => w.showBanner(z0.name, { kanji: z0.kanji, sub: 'Japão, 11º ano da Era Meiji', dur: 3.2, y: 0.32 }),
         },
-        { x: ax, y: ay, zoom: 1.2, rate: 0.55, dur: 3.2, onStart: () => w.storm.strike(true) },
-        { x: () => p0.x, y: () => p0.y, zoom: CONFIG.CAMERA.exploreZoom, rate: 1.6, dur: 1.4 },
-      ], null, true);
-      camera.setTarget(p0.x + ux * 1.1, p0.y + uy * 1.1, 3.3);
+        { x: () => w.player.x, y: () => w.player.y, zoom: 2.3, rate: 1.8, dur: 1.2 },
+      ], () => { g.approach = true; }, true);
+      camera.setTarget(stage.establish[0], stage.establish[1], stage.establish[2]);
       camera.cut();
       camera.letterbox = 1;
-      return w;
+    } else {
+      camera.setTarget(w.player.x, w.player.y, CONFIG.CAMERA.exploreZoom);
+      camera.cut();
     }
-    w.cutscene = new Cutscene([
-      {
-        x: est[0], y: est[1], zoom: est[2], rate: 0.6, dur: 1.9, cut: true,
-        onStart: () => w.showBanner(stage.name, { kanji: stage.kanji, sub: stage.objective, dur: 3.2, y: 0.32 }),
-      },
-      { x: () => w.player.x, y: () => w.player.y, zoom: CONFIG.CAMERA.exploreZoom, rate: 1.8, dur: 1.4 },
-    ], null, true);
-    camera.setTarget(est[0], est[1], est[2]);
-    camera.cut();
-    camera.letterbox = 1;
     return w;
+  }
+
+  /** Zona (vila, estrada ou santuário) que contém a coordenada x. */
+  function zoneAt(w, x) {
+    for (const z of w.zones) if (x < z.x1) return z;
+    return w.zones[w.zones.length - 1];
   }
 
   /**
@@ -404,9 +533,9 @@ class Cutscene {
    *  - demais grupos (e as emboscadas do caminho): escondidos ATRÁS de casas e
    *    árvores grandes, fora da vista da câmera, prontos para cercar o jogador.
    */
-  function placeCamps(w, index) {
+  function placeCamps(w, seed) {
     const stage = w.stage, L = w.level;
-    const rnd = makeRng(index * 1013 + 17);
+    const rnd = makeRng(seed * 1013 + 17);
     const taken = [];
     // Só aceita posições alcançáveis a partir do início (sem bolsões fechados de bambu).
     L.flowTimer = 0;
@@ -504,14 +633,18 @@ class Cutscene {
     const p = w.player;
     let fx, fy, zoom, rate, lb = 0, keep = true;
 
-    if (w.cutscene) {
+    if (w.dialog && w.dialog.speaker) {
+      // Diálogo: plano fechado entre o rōnin e quem fala.
+      const q = w.dialog.speaker;
+      fx = (p.x + q.x) / 2; fy = (p.y + q.y) / 2; zoom = 2.8; rate = 3; lb = 1; keep = false;
+    } else if (w.cutscene) {
       const s = w.cutscene.shot();
       fx = s.x; fy = s.y; zoom = s.zoom; rate = s.rate; lb = 1; keep = false;
       camera.setTarget(fx, fy, zoom, rate);
       if (s.cut) camera.cut();
-    } else if (w.bossFight && w.boss) {
+    } else if (w.bossFight && w.fightBoss) {
       // Plano de duelo: enquadra os dois, aproxima quando estão perto.
-      const b = w.boss;
+      const b = w.fightBoss;
       const d = Math.hypot(b.x - p.x, b.y - p.y);
       fx = p.x * 0.6 + b.x * 0.4;
       fy = p.y * 0.6 + b.y * 0.4;
@@ -582,38 +715,35 @@ class Cutscene {
       else if (c || v) Sfx.clang();
     }
 
-    // O portão abre quando as emboscadas do caminho caíram e o selo foi achado.
-    if (stage.exit && !w.exitOpen && !w.activeArena && w.requiredLeft() === 0 && w.sealFound && !(w.boss && w.boss.alive)) {
-      w.exitOpen = true;
-      w.gate.open = true;
-      w.showBanner('O portão está aberto', { sub: 'Siga até o torii para a próxima vila', dur: 2.6, color: '#ffcf6a' });
-      Sfx.gong();
+    // Entrada numa zona nova.
+    const z = w.zone;
+    if (!z.entered) {
+      z.entered = true;
+      if (z.kind === 'shrine') shrineOpening(w, z);
+      else w.showBanner(z.name, { kanji: z.kanji, sub: z.kind === 'road' ? 'Bandidos rondam a estrada' : undefined, dur: 2.8, y: 0.3 });
     }
-    // Aviso ao encostar no portão ainda selado.
-    if (stage.exit && !w.exitOpen && w.time > w.sealWarned && Math.hypot(p.x - stage.exit[0], p.y - stage.exit[1]) < 2.4) {
-      w.sealWarned = w.time + 6;
-      w.showBanner('O portão está selado', { sub: w.objectiveText(), dur: 2.4, y: 0.24, color: '#ff8a70' });
-    }
+    // Clima: tempestade só no santuário.
+    w.storm.target = z.weather === 'storm' ? (w.storm.calmed ? 0.15 : 1) : 0;
 
-    // Boss: ao entrar no pátio do santuário.
-    if (stage.boss && !w.bossStarted) {
-      const B = stage.boss;
+    // Guardião: ao entrar na arena de pedra.
+    const b = z.bossObj;
+    if (b && b.alive && !z.bossStarted && z.talked) {
+      const B = z.boss;
       if (Math.hypot(p.x - B.center[0], p.y - B.center[1]) < B.triggerR) {
-        w.bossStarted = true;
-        const b = w.boss;
+        z.bossStarted = true;
         w.cutscene = new Cutscene([
           {
             x: () => b.x, y: () => b.y, zoom: 2.4, rate: 2.2, dur: 1.4,
             onStart: () => w.showBanner(b.short, { kanji: b.kanji, sub: b.title, dur: 3.4, y: 0.26 }),
           },
-          { x: () => b.x, y: () => b.y, zoom: 2.7, rate: 3, dur: 1.7, onStart: () => { b.awaken(); if (w.storm) w.storm.strike(true); } },
+          { x: () => b.x, y: () => b.y, zoom: 2.7, rate: 3, dur: 1.7, onStart: () => { b.awaken(); if (z.weather) w.storm.strike(true); } },
           { x: () => (b.x + p.x) / 2, y: () => (b.y + p.y) / 2, zoom: 1.8, rate: 3, dur: 0.5 },
-        ], () => { w.bossFight = true; });
+        ], () => { w.bossFight = true; w.fightBoss = b; });
       }
     }
 
     // Arena travada: o jogador não sai do círculo enquanto houver luta.
-    const lock = w.activeArena ? { c: w.activeArena.center, r: w.activeArena.r } : w.bossFight ? { c: stage.boss.center, r: stage.boss.arenaR } : null;
+    const lock = w.activeArena ? { c: w.activeArena.center, r: w.activeArena.r } : w.bossFight && w.fightBoss ? { c: w.fightBoss.data.center, r: w.fightBoss.data.arenaR } : null;
     if (lock) {
       const dx = p.x - lock.c[0], dy = p.y - lock.c[1];
       const d = Math.hypot(dx, dy);
@@ -622,11 +752,22 @@ class Cutscene {
         p.y = lock.c[1] + (dy / d) * lock.r;
       }
     }
+  }
 
-    // Saída.
-    if (w.exitOpen && stage.exit && p.alive && Math.hypot(p.x - stage.exit[0], p.y - stage.exit[1]) < 0.9) {
-      stageClear();
-    }
+  /** Abertura do santuário: plano atrás do rōnin, relâmpago, a câmera revela a arena. */
+  function shrineOpening(w, z) {
+    const [ax, ay] = z.boss.center;
+    const p0 = w.player;
+    const d = Math.hypot(ax - p0.x, ay - p0.y), ux = (ax - p0.x) / d, uy = (ay - p0.y) / d;
+    w.storm.intensity = 1;
+    w.cutscene = new Cutscene([
+      {
+        x: () => p0.x + ux * 1.1, y: () => p0.y + uy * 1.1, zoom: 3.3, rate: 3, dur: 2.2, cut: true,
+        onStart: () => w.showBanner(z.name, { kanji: z.kanji, sub: z.objective, dur: 3.6, y: 0.74 }),
+      },
+      { x: ax, y: ay, zoom: 1.2, rate: 0.55, dur: 3.2, onStart: () => w.storm.strike(true) },
+      { x: () => p0.x, y: () => p0.y, zoom: CONFIG.CAMERA.exploreZoom, rate: 1.6, dur: 1.4 },
+    ], null, true);
   }
 
   function updateWorld(w, dt, realDt) {
@@ -648,14 +789,16 @@ class Cutscene {
     }
     w.spawnQueue = w.spawnQueue.filter((q) => q.delay > 0);
 
-    for (const e of w.enemies) e.update(dt);
+    // Só simula quem está perto (o resto da região fica "congelado").
+    const px = w.player.x;
+    for (const e of w.enemies) if (Math.abs(e.x - px) < 34 || (e.state !== 'camp' && e.state !== 'spawn')) e.update(dt);
     w.enemies = w.enemies.filter((e) => !e.dead);
-    if (w.boss) w.boss.update(dt);
+    for (const b of w.bosses) if (b.state !== 'dormant' || Math.abs(b.x - px) < 30) b.update(dt);
+    for (const t of w.townsfolk) if (Math.abs(t.x - px) < 30) t.update(dt);
     for (const pr of w.projectiles) pr.update(dt);
     w.projectiles = w.projectiles.filter((pr) => pr.alive);
     for (const pk of w.pickups) pk.update(dt);
     w.pickups = w.pickups.filter((pk) => pk.alive);
-    if (w.gate) w.gate.t += dt;
     for (const br of w.braziers) br.update(dt);
     for (const c of w.chests) c.update(dt);
     for (const v of w.villagers) v.update(dt);
@@ -663,8 +806,8 @@ class Cutscene {
     for (const f of w.campfires) f.update(dt);
 
     // Separação entre corpos.
-    const bodies = w.enemies.filter((e) => e.alive);
-    if (w.boss && w.boss.alive) bodies.push(w.boss);
+    const bodies = w.enemies.filter((e) => e.alive && Math.abs(e.x - px) < 20);
+    for (const b of w.bosses) if (b.alive && Math.abs(b.x - px) < 20) bodies.push(b);
     for (const e of bodies) e.separateFrom([...bodies, w.player], 0.8);
     if (w.player.alive && w.player.dashTime <= 0) w.player.separateFrom(bodies, 0.5);
 
@@ -692,6 +835,7 @@ class Cutscene {
     if (w.smokeTimer <= 0 && w.stage.smoke) {
       w.smokeTimer = 0.14;
       for (const [x, y] of w.stage.smoke) {
+        if (Math.abs(x - px) > 28) continue;
         w.effects.puffs.push({
           x: x + (Math.random() - 0.5) * 0.8, y: y + (Math.random() - 0.5) * 0.8, z: 90 + Math.random() * 20,
           vx: 0.35, vy: -0.35, vz: 26 + Math.random() * 14, r: 0.35, life: 2.4, max: 2.4, color: '40,36,34',
@@ -728,7 +872,7 @@ class Cutscene {
     w.level.drawGround(ctx, cam, w.time);
 
     // Limite da arena (névoa vermelha tracejada no chão).
-    const lock = w.activeArena ? { c: w.activeArena.center, r: w.activeArena.r } : w.bossFight ? { c: w.stage.boss.center, r: w.stage.boss.arenaR } : null;
+    const lock = w.activeArena ? { c: w.activeArena.center, r: w.activeArena.r } : w.bossFight && w.fightBoss ? { c: w.fightBoss.data.center, r: w.fightBoss.data.arenaR } : null;
     if (lock) {
       ctx.save();
       Ground.circle(ctx, cam, lock.c[0], lock.c[1], lock.r);
@@ -741,8 +885,9 @@ class Cutscene {
     }
 
     w.effects.drawGround(ctx, cam);
-    for (const e of w.enemies) e.drawGround(ctx, cam);
-    if (w.boss) w.boss.drawGround(ctx, cam);
+    const cx = w.player.x, near = (o) => Math.abs(o.x - cx) < 26;
+    for (const e of w.enemies) if (near(e)) e.drawGround(ctx, cam);
+    for (const b of w.bosses) if (near(b)) b.drawGround(ctx, cam);
 
     // Monta a lista de desenháveis visíveis e ordena por profundidade isométrica.
     const list = [];
@@ -751,9 +896,10 @@ class Cutscene {
       if (b.x1 < 0 || b.x0 > cam.viewW || b.y1 < 0 || b.y0 > cam.viewH) continue;
       list.push(pr);
     }
-    list.push(w.player, ...w.enemies, ...w.pickups, ...w.projectiles, ...w.chests, ...w.campfires, ...w.villagers, ...w.braziers);
-    if (w.boss) list.push(w.boss);
-    if (w.gate) list.push(w.gate);
+    list.push(w.player, ...w.pickups, ...w.projectiles);
+    for (const group of [w.enemies, w.chests, w.campfires, w.villagers, w.braziers, w.townsfolk, w.bosses]) {
+      for (const o of group) if (near(o)) list.push(o);
+    }
     const sorted = depthSort(list);
 
     // Casas/árvores na frente do jogador ficam translúcidas (oclusão).
@@ -779,8 +925,11 @@ class Cutscene {
     const storm = w && w.storm;
     Sfx.setRain(!!storm && game.state !== 'title' && storm.intensity > 0.3);
     if (!storm) return;
-    if (game.state !== 'paused') storm.update(realDt);
-    storm.draw(ctx, camera);
+    if (game.state !== 'paused') {
+      storm.intensity = damp(storm.intensity, storm.target ?? storm.intensity, 0.8, realDt);
+      storm.update(realDt);
+    }
+    if (storm.intensity > 0.02) storm.draw(ctx, camera);
   }
 
   function renderDebug(w) {
@@ -795,7 +944,7 @@ class Cutscene {
       } else if (p.def.solid === 'circle') Ground.circle(ctx, cam, p.cx, p.cy, p.r);
       ctx.stroke();
     }
-    for (const a of [w.player, ...w.enemies, ...(w.boss ? [w.boss] : [])]) {
+    for (const a of [w.player, ...w.enemies, ...w.bosses]) {
       Ground.circle(ctx, cam, a.x, a.y, a.radius);
       ctx.strokeStyle = '#ffd34d';
       ctx.stroke();
@@ -813,7 +962,7 @@ class Cutscene {
     ctx.textAlign = 'left';
     const p = w.player;
     ctx.fillText(`FPS ${game.fps.toFixed(0)}  mundo (${p.x.toFixed(2)}, ${p.y.toFixed(2)})  estado ${p.state}`, 18, cam.viewH - 44);
-    ctx.fillText(`zoom ${camera.zoom.toFixed(2)}  inimigos ${w.enemies.length}  fichas ${w.attackTokens}  onda ${w.waveIndex}`, 18, cam.viewH - 26);
+    ctx.fillText(`zoom ${camera.zoom.toFixed(2)}  inimigos ${w.enemies.length}  fichas ${w.attackTokens}  zona ${w.zone.index} ${w.zone.name}`, 18, cam.viewH - 26);
     ctx.restore();
   }
 
@@ -857,34 +1006,26 @@ class Cutscene {
     game.fadeThen = fn;
   }
 
-  function startStory(index) {
-    game.stageIndex = index;
-    const hp = game.world && game.world.player.alive && game.world.index !== index
-      ? Math.min(CONFIG.PLAYER.maxHp, game.world.player.hp + (CONFIG.PLAYER.maxHp - game.world.player.hp) * 0.6)
-      : CONFIG.PLAYER.maxHp;
-    game.world = createWorld(index, hp);
-    game.state = 'story';
+  function startRun(progress) {
+    game.world = createWorld(progress, CONFIG.PLAYER.maxHp);
+    game.state = 'play';
     game.t = 0;
   }
 
-  function stageClear() {
-    if (game.state !== 'play') return;
-    game.state = 'transition';
-    Sfx.gong();
-    writeSave({ stage: game.stageIndex + 1, items: game.items });
-    fadeTo(() => startStory(game.stageIndex + 1));
-  }
-
   function toVictory() {
-    writeSave({ stage: 0, items: [] });
+    writeSave({ seed: 0, progress: 0, items: [] });
     game.state = 'victory';
     game.t = 0;
   }
 
-  function newGame(from = 0, items = []) {
+  /** Jogo novo: semente nova (mundo novo). Continuar: mesma semente do save. */
+  function newGame(save = null) {
     game.stats = newStats();
-    game.items = items.slice();
-    fadeTo(() => startStory(from));
+    game.items = save ? save.items.slice() : [];
+    game.seed = save && save.seed ? save.seed : Math.floor(Math.random() * 1e9) + 1;
+    const progress = save ? save.progress : 0;
+    writeSave({ seed: game.seed, progress, items: game.items });
+    fadeTo(() => startRun(progress));
     game.state = 'transition';
   }
 
@@ -894,6 +1035,7 @@ class Cutscene {
       game.stats = newStats();
       game.world = createWorld(0, undefined, 20261108);
       game.world.cutscene = null;
+      game.world.zones[0].greeterObj.approach = false;
       game.state = 'title';
       game.t = 0;
       game.save = loadSave();
@@ -944,7 +1086,7 @@ class Cutscene {
 
     if (input.wasPressed('F3')) game.debug = !game.debug;
     // Em jogo os toques viram joystick/botões; em menus e cutscenes, "confirmar".
-    input.mode = game.state === 'play' && !(game.world && game.world.cutscene) ? 'play' : 'menu';
+    input.mode = game.state === 'play' && !(game.world && (game.world.cutscene || game.world.dialog)) ? 'play' : 'menu';
     input.updateTouch(realDt);
     const portrait = TOUCH.active && camera.viewH > camera.viewW * 1.05;
     if (input.wasPressed('KeyM')) Sfx.toggleMute();
@@ -959,42 +1101,41 @@ class Cutscene {
 
       case 'title': {
         // Fundo: a aldeia em plano aéreo lento, girando em volta do santuário.
-        const a = game.t * 0.12;
-        camera.setTarget(14 + Math.cos(a) * 5, 14 + Math.sin(a) * 5, 1.15, 1);
+        const a = game.t * 0.12, tc = w.zones[0].townCenter;
+        camera.setTarget(tc[0] + Math.cos(a) * 6, tc[1] + Math.sin(a) * 6, 1.15, 1);
         camera.letterboxTarget = 1;
         camera.update(realDt, realDt);
         w.time += realDt;
         w.effects.update(realDt);
         renderWorld(w);
         renderWeather(w, realDt);
-        renderAmbient(w.stage.ambient, realDt);
+        renderAmbient(w.zone.ambient, realDt);
         UI.vignette(ctx, camera, 0);
         UI.letterbox(ctx, camera);
-        UI.title(ctx, camera, game.t, game.save.stage);
+        UI.title(ctx, camera, game.t, game.save.started ? game.save.progress : 0);
         const hit = (id) => UI.titleButtons.find((b) => b.id === id && input.tapIn(b));
         if (hit('fullscreen')) { input.flush(); goFullscreen(); }
-        else if ((input.wasPressed('KeyC') || hit('continue')) && game.save.stage > 0) { input.flush(); newGame(game.save.stage, game.save.items); }
-        else if (input.wasPressed('Enter', 'NumpadEnter', 'Space') || hit('new')) { input.flush(); newGame(0); }
+        else if ((input.wasPressed('KeyC') || hit('continue')) && game.save.started) { input.flush(); newGame(game.save); }
+        else if (input.wasPressed('Enter', 'NumpadEnter', 'Space') || hit('new')) { input.flush(); newGame(null); }
         else if (input.clicked) input.flush();
         break;
       }
 
-      case 'story': {
-        directCamera(w, 0, realDt);
-        renderWorld(w);
-        renderWeather(w, realDt);
-        UI.story(ctx, camera, w.stage, game.t, w.index, STAGES.length);
-        if (input.consumeConfirm()) {
-          if (game.t * 55 < UI.storyLength(w.stage)) game.t = 999; // completa o texto
-          else {
-            game.state = 'play';
-            game.t = 0;
+      case 'play': {
+        if (w.dialog) {
+          // Avança o diálogo (completa o texto, depois passa para a próxima fala).
+          const D = w.dialog;
+          D.t += realDt;
+          if (input.consumeConfirm() || input.wasPressed('KeyE') || input.consumeAttack()) {
+            const line = D.lines[D.i][1];
+            if (D.t * 45 < line.length) D.t = 999;
+            else if (++D.i >= D.lines.length) {
+              w.dialog = null;
+              input.flush();
+              if (D.onEnd) D.onEnd();
+            } else D.t = 0;
           }
         }
-        break;
-      }
-
-      case 'play': {
         if (w.cutscene && w.cutscene.skippable && (input.wasPressed('Enter', 'Escape', 'Space') || input.clicked)) {
           w.cutscene.skip(); // plano de abertura pode ser pulado
           input.flush();
@@ -1008,18 +1149,20 @@ class Cutscene {
           dt = 0;
           simulated = false;
         }
+        if (w.dialog) dt = 0; // o mundo espera a conversa
         if (dt > 0) updateWorld(w, dt, realDt);
-        directCamera(w, dt, realDt);
+        directCamera(w, w.dialog ? realDt : dt, realDt);
         renderWorld(w);
         renderWeather(w, realDt);
-        renderAmbient(w.stage.ambient, realDt);
+        renderAmbient(w.zone.ambient, realDt);
         UI.vignette(ctx, camera, w.damageVignette);
         UI.letterbox(ctx, camera);
         UI.hud(ctx, w);
         UI.minimap(ctx, w);
         UI.banner(ctx, w);
-        input.buttons = TOUCH.active && !w.cutscene ? UI.touchLayout(w) : [];
-        UI.touchControls(ctx, w, input);
+        input.buttons = TOUCH.active && !w.cutscene && !w.dialog ? UI.touchLayout(w) : [];
+        if (!w.dialog) UI.touchControls(ctx, w, input);
+        UI.dialog(ctx, w);
         break;
       }
 
@@ -1042,10 +1185,11 @@ class Cutscene {
         if (game.t > 1 && input.consumeConfirm()) {
           game.state = 'transition';
           fadeTo(() => {
-            game.stats.villagersTotal -= game.world.villagersStart || 0;
             game.stats.rescued -= game.world.rescuedHere || 0;
-            game.world = createWorld(game.stageIndex, CONFIG.PLAYER.maxHp);
+            const prog = game.world.progress;
+            game.world = createWorld(prog, CONFIG.PLAYER.maxHp);
             game.world.cutscene = null;
+            if (prog === 0) { game.world.zones[0].talked = true; game.world.zones[0].greeterObj.approach = false; }
             camera.letterbox = 0;
             game.state = 'play';
           });

@@ -3,7 +3,7 @@ Extrai os sprites das folhas com fundo verde (chroma key) e gera:
   assets/sprites/<nome>.png  — PNG com transparência, já recortado
   js/atlas.js                — tamanhos e ponto de ancoragem (pés) de cada sprite
 
-Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg> <costas_oni_ronin.jpg> <costas_kunoichi.jpg> <costas_aldeoes.jpg> <floresta2.jpg> <ronin_costas.png> <ronin_caminhada.jpg> <npcs_caminhada.jpg>
+Uso:  python3 tools/extract_sprites.py <folha_boss.jpg> <folha_heroi.jpg> <folha_floresta.jpg> <folha_acampamento.jpg> <folha_minichefes.jpg> <costas_oni_ronin.jpg> <costas_kunoichi.jpg> <costas_aldeoes.jpg> <floresta2.jpg> <ronin_costas.png> <ronin_caminhada.jpg> <npcs_caminhada.jpg> <vila_moradores.jpg>
 
 Cada quadro é definido por um retângulo generoso na folha. Dentro dele mantemos
 o maior componente conectado e qualquer componente que NÃO toque a borda do
@@ -186,6 +186,7 @@ FRAMES = {
     'hero_back_slash': (10, 520, 4, 602, 118, {'scale': 1}),
     'hero_back_draw': (10, 230, 104, 306, 233, {'scale': 1}),
     'hero_back_slash2': (10, 148, 114, 232, 233, {'scale': 1}),
+    'hero_front': (10, 6, 4, 80, 120, {'scale': 1.32, 'only_main': True}),
     # ---------------- Rōnin: ciclos de caminhada em 8 quadros (folha 11) ----------------
     'hero_bw0': (11, 4, 48, 246, 312, {'scale': 0.6, 'only_main': True}),
     'hero_bw1': (11, 254, 48, 496, 312, {'scale': 0.6, 'only_main': True}),
@@ -252,11 +253,143 @@ FRAMES = {
     'bandit_w2': (12, 1400, 1188, 1600, 1490, {'only_main': True}),
     'bandit_w3': (12, 1600, 1188, 1800, 1490, {'only_main': True}),
     'bandit_w4': (12, 1800, 1188, 2000, 1490, {'only_main': True}),
+    # ---------------- Vila: construções e objetos (folha 13) ----------------
+    'shrine_big': (13, 5, 5, 300, 240, {'keep_all_inner': True, 'scale': 1}),
+    'torii_red': (13, 295, 15, 420, 195, {'keep_all_inner': True, 'scale': 1}),
+    'shrine_lion': (13, 415, 10, 615, 235, {'keep_all_inner': True, 'scale': 1}),
+    'shrine_lanterns': (13, 620, 10, 840, 230, {'keep_all_inner': True, 'scale': 1}),
+    'well_a': (13, 20, 245, 120, 355, {'keep_all_inner': True, 'scale': 1}),
+    'well_b': (13, 1010, 10, 1150, 155, {'keep_all_inner': True, 'scale': 1}),
+    'well_roof': (13, 1340, 10, 1490, 155, {'keep_all_inner': True, 'scale': 1}),
+    'well_box': (13, 1675, 10, 1820, 155, {'keep_all_inner': True, 'scale': 1}),
+    'shop_a': (13, 5, 480, 200, 650, {'keep_all_inner': True, 'scale': 1}),
+    'shop_b': (13, 212, 488, 398, 635, {'keep_all_inner': True, 'scale': 1}),
+    'shop_c': (13, 412, 488, 598, 635, {'keep_all_inner': True, 'scale': 1}),
+    'shop_d': (13, 600, 480, 790, 650, {'keep_all_inner': True, 'scale': 1}),
+    'shop_e': (13, 800, 480, 995, 650, {'keep_all_inner': True, 'scale': 1}),
+    'house_fence_a': (13, 5, 650, 240, 845, {'keep_all_inner': True, 'scale': 1}),
+    'house_fence_b': (13, 245, 650, 445, 830, {'keep_all_inner': True, 'scale': 1}),
+    'house_thatch2': (13, 445, 668, 585, 800, {'keep_all_inner': True, 'scale': 1}),
+    'house_fence_c': (13, 595, 655, 795, 835, {'keep_all_inner': True, 'scale': 1}),
+    'house_fence_d': (13, 800, 660, 995, 840, {'keep_all_inner': True, 'scale': 1}),
+    'store_thatch': (13, 1010, 160, 1160, 330, {'keep_all_inner': True, 'scale': 1}),
+    'store_tile': (13, 1340, 165, 1490, 330, {'keep_all_inner': True, 'scale': 1}),
+    'store_tile2': (13, 1835, 165, 1985, 330, {'keep_all_inner': True, 'scale': 1}),
+    'barn_tile': (13, 1340, 340, 1495, 500, {'keep_all_inner': True, 'scale': 1}),
+    'mansion': (13, 1005, 500, 1330, 815, {'keep_all_inner': True, 'scale': 1}),
+    'watchtower': (13, 1340, 510, 1490, 740, {'keep_all_inner': True, 'scale': 1}),
+    'market_stall': (13, 5, 860, 130, 975, {'keep_all_inner': True, 'scale': 1}),
+    'cart': (13, 135, 855, 260, 950, {'keep_all_inner': True, 'scale': 1}),
+    'hay_cart': (13, 275, 860, 400, 960, {'keep_all_inner': True, 'scale': 1}),
+    'hay': (13, 410, 860, 500, 945, {'keep_all_inner': True, 'scale': 1}),
+    'barrel': (13, 755, 868, 815, 940, {'keep_all_inner': True, 'scale': 1}),
+    'barrel2': (13, 835, 868, 895, 940, {'keep_all_inner': True, 'scale': 1}),
+    'mini_shrine': (13, 905, 860, 1000, 950, {'keep_all_inner': True, 'scale': 1}),
+    'bridge_red': (13, 170, 975, 310, 1035, {'keep_all_inner': True, 'scale': 1}),
+    'pier': (13, 70, 990, 170, 1035, {'keep_all_inner': True, 'scale': 1}),
+    # ---------------- Moradores (folha 13) ----------------
+    'farmer0': (13, 1000, 896, 1100, 1016, {'only_main': True, 'scale': 1}),
+    'farmer1': (13, 1100, 896, 1200, 1016, {'only_main': True, 'scale': 1}),
+    'farmer2': (13, 1200, 896, 1300, 1016, {'only_main': True, 'scale': 1}),
+    'farmer3': (13, 1300, 896, 1400, 1016, {'only_main': True, 'scale': 1}),
+    'farmer4': (13, 1400, 896, 1500, 1016, {'only_main': True, 'scale': 1}),
+    'farmer5': (13, 1500, 896, 1600, 1016, {'only_main': True, 'scale': 1}),
+    'farmer6': (13, 1600, 896, 1700, 1016, {'only_main': True, 'scale': 1}),
+    'farmer7': (13, 1700, 896, 1800, 1016, {'only_main': True, 'scale': 1}),
+    'farmer8': (13, 1800, 896, 1900, 1016, {'only_main': True, 'scale': 1}),
+    'farmer9': (13, 1900, 896, 2000, 1016, {'only_main': True, 'scale': 1}),
+    'farmer20': (13, 0, 1040, 100, 1157, {'only_main': True, 'scale': 1}),
+    'farmer21': (13, 100, 1040, 200, 1157, {'only_main': True, 'scale': 1}),
+    'farmer22': (13, 200, 1040, 300, 1157, {'only_main': True, 'scale': 1}),
+    'farmer23': (13, 300, 1040, 400, 1157, {'only_main': True, 'scale': 1}),
+    'farmer24': (13, 400, 1040, 500, 1157, {'only_main': True, 'scale': 1}),
+    'farmer25': (13, 500, 1040, 600, 1157, {'only_main': True, 'scale': 1}),
+    'farmer26': (13, 600, 1040, 700, 1157, {'only_main': True, 'scale': 1}),
+    'farmer27': (13, 700, 1040, 800, 1157, {'only_main': True, 'scale': 1}),
+    'farmer28': (13, 800, 1040, 900, 1157, {'only_main': True, 'scale': 1}),
+    'farmer29': (13, 900, 1040, 1000, 1157, {'only_main': True, 'scale': 1}),
+    'merchant0': (13, 1000, 1030, 1100, 1145, {'only_main': True, 'scale': 1}),
+    'merchant1': (13, 1100, 1030, 1200, 1145, {'only_main': True, 'scale': 1}),
+    'merchant2': (13, 1200, 1030, 1300, 1145, {'only_main': True, 'scale': 1}),
+    'merchant3': (13, 1300, 1030, 1400, 1145, {'only_main': True, 'scale': 1}),
+    'merchant4': (13, 1400, 1030, 1500, 1145, {'only_main': True, 'scale': 1}),
+    'merchant5': (13, 1500, 1030, 1600, 1145, {'only_main': True, 'scale': 1}),
+    'merchant6': (13, 1600, 1030, 1700, 1145, {'only_main': True, 'scale': 1}),
+    'merchant7': (13, 1700, 1030, 1800, 1145, {'only_main': True, 'scale': 1}),
+    'merchant8': (13, 1800, 1030, 1900, 1145, {'only_main': True, 'scale': 1}),
+    'merchant9': (13, 1900, 1030, 2000, 1145, {'only_main': True, 'scale': 1}),
+    'youth0': (13, 0, 1164, 100, 1274, {'only_main': True, 'scale': 1}),
+    'youth1': (13, 100, 1164, 200, 1274, {'only_main': True, 'scale': 1}),
+    'youth2': (13, 200, 1164, 300, 1274, {'only_main': True, 'scale': 1}),
+    'youth3': (13, 300, 1164, 400, 1274, {'only_main': True, 'scale': 1}),
+    'youth4': (13, 400, 1164, 500, 1274, {'only_main': True, 'scale': 1}),
+    'youth5': (13, 500, 1164, 600, 1274, {'only_main': True, 'scale': 1}),
+    'youth6': (13, 600, 1164, 700, 1274, {'only_main': True, 'scale': 1}),
+    'youth7': (13, 700, 1164, 800, 1274, {'only_main': True, 'scale': 1}),
+    'youth8': (13, 800, 1164, 900, 1274, {'only_main': True, 'scale': 1}),
+    'youth9': (13, 900, 1164, 1000, 1274, {'only_main': True, 'scale': 1}),
+    'monk_npc0': (13, 1000, 1158, 1100, 1269, {'only_main': True, 'scale': 1}),
+    'monk_npc1': (13, 1100, 1158, 1200, 1269, {'only_main': True, 'scale': 1}),
+    'monk_npc2': (13, 1200, 1158, 1300, 1269, {'only_main': True, 'scale': 1}),
+    'monk_npc3': (13, 1300, 1158, 1400, 1269, {'only_main': True, 'scale': 1}),
+    'monk_npc4': (13, 1400, 1158, 1500, 1269, {'only_main': True, 'scale': 1}),
+    'miko0': (13, 1500, 1158, 1600, 1269, {'only_main': True, 'scale': 1}),
+    'miko1': (13, 1600, 1158, 1700, 1269, {'only_main': True, 'scale': 1}),
+    'miko2': (13, 1700, 1158, 1800, 1269, {'only_main': True, 'scale': 1}),
+    'miko3': (13, 1800, 1158, 1900, 1269, {'only_main': True, 'scale': 1}),
+    'miko4': (13, 1900, 1158, 2000, 1269, {'only_main': True, 'scale': 1}),
+    'woman0': (13, 0, 1285, 100, 1385, {'only_main': True, 'scale': 1}),
+    'woman1': (13, 100, 1285, 200, 1385, {'only_main': True, 'scale': 1}),
+    'woman2': (13, 200, 1285, 300, 1385, {'only_main': True, 'scale': 1}),
+    'woman3': (13, 300, 1285, 400, 1385, {'only_main': True, 'scale': 1}),
+    'woman4': (13, 400, 1285, 500, 1385, {'only_main': True, 'scale': 1}),
+    'woman5': (13, 500, 1285, 600, 1385, {'only_main': True, 'scale': 1}),
+    'woman6': (13, 600, 1285, 700, 1385, {'only_main': True, 'scale': 1}),
+    'woman7': (13, 700, 1285, 800, 1385, {'only_main': True, 'scale': 1}),
+    'woman8': (13, 800, 1285, 900, 1385, {'only_main': True, 'scale': 1}),
+    'woman9': (13, 900, 1285, 1000, 1385, {'only_main': True, 'scale': 1}),
+    'woman20': (13, 1000, 1280, 1100, 1381, {'only_main': True, 'scale': 1}),
+    'woman21': (13, 1100, 1280, 1200, 1381, {'only_main': True, 'scale': 1}),
+    'woman22': (13, 1200, 1280, 1300, 1381, {'only_main': True, 'scale': 1}),
+    'woman23': (13, 1300, 1280, 1400, 1381, {'only_main': True, 'scale': 1}),
+    'woman24': (13, 1400, 1280, 1500, 1381, {'only_main': True, 'scale': 1}),
+    'woman25': (13, 1500, 1280, 1600, 1381, {'only_main': True, 'scale': 1}),
+    'woman26': (13, 1600, 1280, 1700, 1381, {'only_main': True, 'scale': 1}),
+    'woman27': (13, 1700, 1280, 1800, 1381, {'only_main': True, 'scale': 1}),
+    'woman28': (13, 1800, 1280, 1900, 1381, {'only_main': True, 'scale': 1}),
+    'woman29': (13, 1900, 1280, 2000, 1381, {'only_main': True, 'scale': 1}),
+    'elder0': (13, 0, 1396, 100, 1492, {'only_main': True, 'scale': 1}),
+    'elder1': (13, 100, 1396, 200, 1492, {'only_main': True, 'scale': 1}),
+    'elder2': (13, 200, 1396, 300, 1492, {'only_main': True, 'scale': 1}),
+    'elder3': (13, 300, 1396, 400, 1492, {'only_main': True, 'scale': 1}),
+    'elder4': (13, 400, 1396, 500, 1492, {'only_main': True, 'scale': 1}),
+    'elder5': (13, 500, 1396, 600, 1492, {'only_main': True, 'scale': 1}),
+    'elder6': (13, 600, 1396, 700, 1492, {'only_main': True, 'scale': 1}),
+    'elder7': (13, 700, 1396, 800, 1492, {'only_main': True, 'scale': 1}),
+    'elder8': (13, 800, 1396, 900, 1492, {'only_main': True, 'scale': 1}),
+    'elder9': (13, 900, 1396, 1000, 1492, {'only_main': True, 'scale': 1}),
+    'elder20': (13, 1000, 1395, 1100, 1492, {'only_main': True, 'scale': 1}),
+    'elder21': (13, 1100, 1395, 1200, 1492, {'only_main': True, 'scale': 1}),
+    'elder22': (13, 1200, 1395, 1300, 1492, {'only_main': True, 'scale': 1}),
+    'elder23': (13, 1300, 1395, 1400, 1492, {'only_main': True, 'scale': 1}),
+    'elder24': (13, 1400, 1395, 1500, 1492, {'only_main': True, 'scale': 1}),
+    'elder25': (13, 1500, 1395, 1600, 1492, {'only_main': True, 'scale': 1}),
+    'elder26': (13, 1600, 1395, 1700, 1492, {'only_main': True, 'scale': 1}),
+    'elder27': (13, 1700, 1395, 1800, 1492, {'only_main': True, 'scale': 1}),
+    'elder28': (13, 1800, 1395, 1900, 1492, {'only_main': True, 'scale': 1}),
+    'elder29': (13, 1900, 1395, 2000, 1492, {'only_main': True, 'scale': 1}),
+    'townsman0': (13, 1300, 760, 1400, 880, {'only_main': True, 'scale': 1}),
+    'townsman1': (13, 1400, 760, 1500, 880, {'only_main': True, 'scale': 1}),
+    'townsman2': (13, 1500, 760, 1600, 880, {'only_main': True, 'scale': 1}),
+    'townsman3': (13, 1600, 760, 1700, 880, {'only_main': True, 'scale': 1}),
+    'townsman4': (13, 1700, 760, 1800, 880, {'only_main': True, 'scale': 1}),
+    'townsman5': (13, 1800, 760, 1900, 880, {'only_main': True, 'scale': 1}),
+    'townsman6': (13, 1900, 760, 2000, 880, {'only_main': True, 'scale': 1}),
 }
 
 # Cor de fundo de cada folha (as duas primeiras são verde-chroma, a terceira verde-claro).
 SHEET_BG = {1: (4, 232, 4), 2: (4, 232, 4), 3: (177, 220, 166), 4: (13, 222, 9), 5: (12, 226, 8),
-            6: (4, 234, 1), 7: (9, 218, 2), 8: (11, 219, 3), 9: (174, 219, 162), 10: (12, 228, 9), 11: (76, 130, 78), 12: (13, 235, 0)}
+            6: (4, 234, 1), 7: (9, 218, 2), 8: (11, 219, 3), 9: (174, 219, 162), 10: (12, 228, 9), 11: (76, 130, 78), 12: (13, 235, 0), 13: (3, 252, 60)}
 
 
 def key(rgb, bg=BG):
@@ -303,7 +436,8 @@ def label(mask):
     return lab, comps
 
 
-CHARACTER_PREFIXES = ('boss_', 'hero_', 'ninja_', 'gray_', 'black_', 'villager_', 'bandit_', 'monk_', 'soldier_', 'kuno_', 'oni_', 'ronin_')
+CHARACTER_PREFIXES = ('boss_', 'hero_', 'ninja_', 'gray_', 'black_', 'villager_', 'bandit_', 'monk_', 'soldier_', 'kuno_', 'oni_', 'ronin_',
+                      'farmer', 'merchant', 'youth', 'miko', 'woman', 'elder', 'townsman')
 
 # Ajustes manuais de âncora X (em pixels do PNG final) onde a heurística dos pés erra
 # (ex.: explosão no chão do golpe do boss, perna aberta no rugido).
@@ -467,6 +601,31 @@ def darken_fringe(img):
     return Image.fromarray(np.concatenate([np.clip(out, 0, 255), A[..., None]], -1).astype(np.uint8), 'RGBA')
 
 
+def walk_frame(img, k):
+    """Quadro k (0..7) de uma caminhada de frente: cada metade (perna) da parte de
+    baixo é comprimida para cima em turnos, como se o pé saísse do chão."""
+    import math
+    a = np.asarray(img).copy()
+    h, w = a.shape[:2]
+    ys, xs = np.nonzero(a[..., 3] > 40)
+    cx = int((xs[ys > h * 0.85].min() + xs[ys > h * 0.85].max()) / 2)
+    hip = int(h * 0.66)
+    ph = k / 8 * 2 * math.pi
+    out = a.copy()
+    for side, lift in ((0, max(0.0, math.sin(ph))), (1, max(0.0, -math.sin(ph)))):
+        cols = slice(0, cx) if side == 0 else slice(cx, w)
+        seg = a[hip:, cols]
+        L = h - hip
+        newL = int(round(L - lift * h * 0.11))
+        if newL >= L:
+            continue
+        part = Image.fromarray(seg).resize((seg.shape[1], newL), Image.LANCZOS)
+        blk = np.zeros_like(seg)
+        blk[:newL] = np.asarray(part)
+        out[hip:, cols] = blk
+    return Image.fromarray(out, 'RGBA')
+
+
 def main(*paths):
     # folhas: 1 boss, 2 herói/ninjas/casas, 3 floresta, 4 acampamento, 5 mini-chefes,
     #         6 oni/rōnin de costas, 7 kunoichi de costas, 8 aldeões/bandido de costas, 9 floresta 2
@@ -488,7 +647,7 @@ def main(*paths):
             img = hair_to_black(img)  # o rōnin agora tem cabelo preto
         if name.startswith(('hero_bw', 'hero_bd', 'hero_sw')):
             img = crown_to_black(img, 0.2)  # mechas avermelhadas no alto da cabeça
-        if name.startswith('hero_back_'):
+        if name.startswith(('hero_back_', 'hero_front')):
             img = darken_fringe(img)  # folha pequena: contorno dourado na borda do cabelo
         img.save(os.path.join(OUT, name + '.png'), optimize=True)
         atlas[name] = {'w': nw, 'h': nh, 'ax': round(ax * sc, 1), 'ay': round(ay * sc, 1)}
@@ -499,6 +658,12 @@ def main(*paths):
             name = src.replace('ninja_', tag + '_')
             recolor(base, gain, off).save(os.path.join(OUT, name + '.png'), optimize=True)
             atlas[name] = dict(atlas[src])
+    # Caminhada DE FRENTE (a folha não traz): 8 quadros gerados a partir da pose de
+    # frente, levantando alternadamente a perna esquerda e a direita.
+    front = Image.open(os.path.join(OUT, 'hero_front.png'))
+    for k in range(8):
+        walk_frame(front, k).save(os.path.join(OUT, f'hero_fw{k}.png'), optimize=True)
+        atlas[f'hero_fw{k}'] = dict(atlas['hero_front'])
     with open(os.path.join(ROOT, 'js', 'atlas.js'), 'w') as f:
         f.write('/* Gerado por tools/extract_sprites.py — não editar à mão.\n'
                 ' * w/h: tamanho do PNG; ax/ay: ponto de apoio (pés) em pixels do PNG. */\n')

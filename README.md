@@ -52,7 +52,7 @@ Em Kurogane também há **soldados com rifle** nas emboscadas: miram (linha verm
 
 ## Mapas procedurais
 
-As quatro vilas têm 67×67 tiles (5× a área original) e são geradas a cada entrada, inclusive ao tentar de novo após morrer (`js/procgen.js`). O sorteio cobre o traçado do caminho, as casas, as 7–8 emboscadas, os 5 acampamentos (ligados ao caminho por trilhas), os baús (um com o selo, um com o tesouro, os demais com comida), os reféns, a arena do guardião e a vegetação. Nome, história, tipos de casa, grupos de inimigos e tesouro de cada vila vêm do modelo em `js/stages.js`. O santuário do boss é fixo; só a vegetação muda.
+Cada vila (62×60 tiles) é gerada por `js/procgen.js` a partir do modelo em `js/stages.js`, a cada jogo novo. O sorteio cobre o traçado do caminho, as casas, as 7–8 emboscadas, os 5 acampamentos (ligados ao caminho por trilhas), os baús (um com o selo, um com o tesouro, os demais com comida), os reféns, a arena do guardião e a vegetação. Nome, história, tipos de casa, grupos de inimigos e tesouro de cada vila vêm do modelo em `js/stages.js`. O santuário do boss é fixo; só a vegetação muda.
 
 ## Exploração
 
@@ -73,14 +73,17 @@ O minimapa (canto inferior direito) mostra só o que você já explorou; baús e
 
 ## Jornada
 
-1. **Aldeia de Kiriyama**: a aldeia incendiada (tutorial).
-2. **Vila de Hanamura**: vila das cerejeiras, com batedores ágeis.
-3. **Floresta de Bambu de Sagino**: assassinos que arremessam kunais, que podem ser rebatidas com a espada.
-4. **Kurogane**: o acampamento do clã.
-5. **Santuário de Kurokama**: luta contra **Gendō, o Ceifador**, em duas fases.
-   - Fase 1: ceifada, giro 360°, salto com impacto e investida, todos telegrafados no chão.
-   - Defesas: guarda frontal (arco azul) que bloqueia golpes e revida com contra-ataque. O golpe final do combo, o iaijutsu ou ataques pelas costas quebram a guarda. Postura: só cambaleia após acumular dano.
-   - Fase 2 (50% da vida): combos encadeados, três saltos seguidos com onda de choque, três investidas, foice arremessada como bumerangue (ele fica desarmado enquanto ela voa), esquiva para trás seguida de investida, guarda mais frequente e reforços.
+A região é um mapa contínuo (`js/region.js`): as quatro vilas ficam lado a lado, ligadas por estradas na mata, e o santuário do Gendō fecha o caminho no alto da montanha. Não há portal nem tela de carregamento entre vilas: o rōnin anda de uma à outra.
+
+```
+Kiriyama ─ Estrada do Leste ─ Hanamura ─ Trilha dos Bambus ─ Sagino ─ Estrada Mineira ─ Kurogane ─ Subida ─ Santuário
+```
+
+- O jogo começa em Kiriyama: o Ancião Sōbei vem até o rōnin e pede ajuda.
+- Em cada vila, um morador (marcado com "!") conta o problema. O guardião da vila protege a saída leste; quando ele cai, a barricada dos bandidos na estrada é derrubada e o morador agradece.
+- As estradas têm emboscadas próprias e reféns (mercadores amarrados).
+- Moradores andam pelas vilas, conversam sozinhos e reagem ao perigo: acuados enquanto a vila está ocupada, alegres depois.
+- O progresso (vilas libertadas, tesouros e a semente do mundo) fica salvo. Ao morrer ou continuar, o rōnin volta para a vila em que estava, no mesmo mundo; um jogo novo sorteia outro mundo.
 
 ## Câmera cinematográfica
 

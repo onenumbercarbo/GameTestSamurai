@@ -222,8 +222,9 @@ class Player extends Actor {
       if (dir === 'upleft') return { name: 'hero_bd' + f8, flip: false, noBack: true, cycle: 'bd' };
       if (dir === 'right') return { name: 'hero_sw' + f8, flip: false, noBack: true, cycle: 'sw' };
       if (dir === 'left') return { name: 'hero_sw' + f8, flip: true, noBack: true, cycle: 'sw' };
-      const seq = ['hero_walk1', 'hero_idle', 'hero_walk2', 'hero_idle'];
-      return { name: seq[Math.floor(this.stride * 1.9) % 4], noBack: true, cycle: 'fw' };
+      if (dir === 'downright') return { name: 'hero_sw' + f8, flip: false, noBack: true, cycle: 'sw' };
+      if (dir === 'downleft') return { name: 'hero_sw' + f8, flip: true, noBack: true, cycle: 'sw' };
+      return { name: 'hero_fw' + f8, flip: false, noBack: true, cycle: 'fw' }; // de frente
     }
     // parado: mantém a vista da última direção
     if (dir === 'up') return { name: 'hero_bw0', flip: false, noBack: true };

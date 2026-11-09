@@ -64,6 +64,34 @@ const PROP_TYPES = {
   slope_path: { scale: 0.95, solid: 'box', shrink: 0.85 },
   slope_roots: { scale: 0.95, solid: 'box', shrink: 0.85 },
   slope_roots2: { scale: 0.95, solid: 'box', shrink: 0.85 },
+  // Vila (folha 13): construções e objetos em escala 1 no PNG.
+  well_a: { scale: 0.62, solid: 'circle', r: 0.6, off: -0.5 },
+  well_b: { scale: 0.62, solid: 'circle', r: 0.6, off: -0.5 },
+  well_roof: { scale: 0.62, solid: 'circle', r: 0.6, off: -0.5 },
+  well_box: { scale: 0.62, solid: 'circle', r: 0.6, off: -0.5 },
+  shop_a: { scale: 0.85, solid: 'box', shrink: 0.75 },
+  shop_b: { scale: 0.85, solid: 'box', shrink: 0.75 },
+  shop_c: { scale: 0.85, solid: 'box', shrink: 0.75 },
+  shop_d: { scale: 0.85, solid: 'box', shrink: 0.75 },
+  shop_e: { scale: 0.85, solid: 'box', shrink: 0.75 },
+  house_fence_a: { scale: 0.85, solid: 'box', shrink: 0.8 },
+  house_fence_b: { scale: 0.85, solid: 'box', shrink: 0.8 },
+  house_fence_c: { scale: 0.85, solid: 'box', shrink: 0.8 },
+  house_fence_d: { scale: 0.85, solid: 'box', shrink: 0.8 },
+  house_thatch2: { scale: 0.85, solid: 'box', shrink: 0.8 },
+  store_thatch: { scale: 0.78, solid: 'box', shrink: 0.8 },
+  store_tile: { scale: 0.78, solid: 'box', shrink: 0.8 },
+  store_tile2: { scale: 0.78, solid: 'box', shrink: 0.8 },
+  barn_tile: { scale: 0.78, solid: 'box', shrink: 0.8 },
+  mansion: { scale: 0.85, solid: 'box', shrink: 0.75 },
+  watchtower: { scale: 0.85, solid: 'circle', r: 0.8, off: -0.4 },
+  market_stall: { scale: 0.75, solid: 'circle', r: 0.55, off: -0.4 },
+  cart: { scale: 0.75, solid: 'circle', r: 0.55, off: -0.3 },
+  hay_cart: { scale: 0.75, solid: 'circle', r: 0.55, off: -0.3 },
+  hay: { scale: 0.7, solid: 'circle', r: 0.45, off: -0.3 },
+  barrel: { scale: 0.65, solid: 'circle', r: 0.3, off: -0.2 },
+  barrel2: { scale: 0.65, solid: 'circle', r: 0.3, off: -0.2 },
+  mini_shrine: { scale: 0.7, solid: 'circle', r: 0.45, off: -0.3 },
   // Vegetação rasteira: só decoração, não bloqueia.
   fern: { scale: 0.8, solid: 'none', r: 0.25 },
   fern2: { scale: 0.8, solid: 'none', r: 0.25 },
@@ -190,7 +218,8 @@ class Level {
     this.stage = stage;
     this.W = stage.size[0];
     this.H = stage.size[1];
-    this.style = GROUND_STYLES[stage.ground];
+    this.style = GROUND_STYLES[stage.ground || 'village'];
+    this.zones = stage.zones || null; // região contínua: estilo do chão por zona
     this.tiles = new Uint8Array(this.W * this.H);
     this.props = [];
 
@@ -213,21 +242,36 @@ class Level {
       }
     }
 
-    for (const [type, x, y] of stage.props) this.props.push(new Prop(type, x, y));
-    this.posts = []; // colisores invisíveis (pilares do torii)
+    // Ocupação (para espalhar vegetação sem sobrepor): 1 = tile perto de algum objeto.
+    this.occ = new Uint8Array(this.W * this.H);
+    this.posts = []; // colisores invisíveis (pilares, baús, fogueiras)
+    for (const [type, x, y, tag] of stage.props) {
+      const p = this.pushProp(new Prop(type, x, y));
+      if (tag) p.tag = tag;
+    }
+    // Áreas livres (clareiras): a vegetação aleatória não entra nelas.
+    this.clearMask = new Uint8Array(this.W * this.H);
+    for (const [cx, cy, r] of stage.clear || []) {
+      for (let j = Math.max(0, Math.floor(cy - r)); j <= Math.min(this.H - 1, Math.ceil(cy + r)); j++) {
+        for (let i = Math.max(0, Math.floor(cx - r)); i <= Math.min(this.W - 1, Math.ceil(cx + r)); i++) {
+          if (Math.hypot(i + 0.5 - cx, j + 0.5 - cy) < r) this.clearMask[j * this.W + i] = 1;
+        }
+      }
+    }
 
     // Espalha vegetação aleatória (com semente) fora do caminho e longe das construções.
-    if (stage.scatter) {
-      const rnd = makeRng(stage.scatter.seed);
+    const scatters = stage.scatters || (stage.scatter ? [stage.scatter] : []);
+    for (const sc of scatters) {
+      const rnd = makeRng(sc.seed);
+      const x0 = Math.max(1, sc.x0 ?? 0), x1 = Math.min(this.W - 1, sc.x1 ?? this.W);
       let tries = 0, placed = 0;
-      while (placed < stage.scatter.count && tries++ < 3000) {
-        const x = 1 + rnd() * (this.W - 2), y = 1 + rnd() * (this.H - 2);
-        const type = stage.scatter.types[Math.floor(rnd() * stage.scatter.types.length)];
+      while (placed < sc.count && tries++ < sc.count * 12 + 400) {
+        const x = x0 + rnd() * (x1 - x0), y = 1 + rnd() * (this.H - 2);
+        const type = sc.types[Math.floor(rnd() * sc.types.length)];
         if (this.tileAt(x, y) !== T_GRASS) continue;
+        if (this.occAt(x, y) || this.clearAt(x, y)) continue;
         if (this.nearPath(x, y, 2.4)) continue;
-        if (this.props.some((p) => this.boxDist(p.box, x, y) < 1.4)) continue;
-        if ((stage.clear || []).some((c) => Math.hypot(x - c[0], y - c[1]) < c[2])) continue;
-        this.props.push(new Prop(type, x, y));
+        this.pushProp(new Prop(type, x, y));
         placed++;
       }
     }
@@ -238,13 +282,11 @@ class Level {
       const types = ['bush_a', 'bush_big', 'bush_round', 'rock_moss', 'rock_big', 'rock_tall', 'rock_flat', 'fern', 'fern2', 'grass_tall', 'fern', 'grass_tall'];
       let placed = 0, tries = 0;
       const want = stage.decor || 26;
-      while (placed < want && tries++ < 2000) {
+      while (placed < want && tries++ < want * 10 + 400) {
         const x = 0.8 + rnd() * (this.W - 1.6), y = 0.8 + rnd() * (this.H - 1.6);
-        if (this.tileAt(x, y) !== T_GRASS || this.nearPath(x, y, 1.9)) continue;
-        if (this.props.some((p) => this.boxDist(p.box, x, y) < 1.0)) continue;
-        if ((stage.clear || []).some((c) => Math.hypot(x - c[0], y - c[1]) < c[2] * 0.75)) continue;
-        if ((stage.waves || []).some((wv) => Math.hypot(x - wv.center[0], y - wv.center[1]) < 2.2)) continue;
-        this.props.push(new Prop(types[Math.floor(rnd() * types.length)], x, y));
+        if (this.tileAt(x, y) !== T_GRASS || this.occAt(x, y) || this.clearAt(x, y)) continue;
+        if (this.nearPath(x, y, 1.9)) continue;
+        this.pushProp(new Prop(types[Math.floor(rnd() * types.length)], x, y));
         placed++;
       }
     }
@@ -256,6 +298,80 @@ class Level {
     this.flowTimer = 0;
   }
 
+  /** Acrescenta um objeto e marca a ocupação em volta dele. */
+  pushProp(p) {
+    p.level = this;
+    this.props.push(p);
+    const b = p.box, m = 1;
+    for (let j = Math.max(0, Math.floor(b.y0 - m)); j <= Math.min(this.H - 1, Math.floor(b.y1 + m)); j++) {
+      for (let i = Math.max(0, Math.floor(b.x0 - m)); i <= Math.min(this.W - 1, Math.floor(b.x1 + m)); i++) this.occ[j * this.W + i] = 1;
+    }
+    return p;
+  }
+
+  occAt(x, y) {
+    const i = Math.floor(x), j = Math.floor(y);
+    return i < 0 || j < 0 || i >= this.W || j >= this.H || this.occ[j * this.W + i] === 1;
+  }
+
+  clearAt(x, y) {
+    const i = Math.floor(x), j = Math.floor(y);
+    return i >= 0 && j >= 0 && i < this.W && j < this.H && this.clearMask[j * this.W + i] === 1;
+  }
+
+  /** Estilo do chão no ponto x (região: depende da zona). */
+  styleAt(x) {
+    if (!this.zones) return this.style;
+    for (const z of this.zones) if (x < z.x1) return GROUND_STYLES[z.ground] || this.style;
+    return GROUND_STYLES[this.zones[this.zones.length - 1].ground] || this.style;
+  }
+
+  /** Remove objetos marcados (ex.: a barricada de uma vila libertada). */
+  removeTagged(tag) {
+    const gone = this.props.filter((p) => p.tag === tag);
+    if (!gone.length) return [];
+    this.props = this.props.filter((p) => p.tag !== tag);
+    this._solids = null;
+    for (const p of gone) this.unmarkRegion(p.box);
+    return gone;
+  }
+
+  /** Colisores perto de (x, y): grade de células de 4 tiles (rápido em mapas grandes). */
+  solidsNear(x, y, r) {
+    const cells = this.solidCells();
+    const out = [];
+    const seen = this._seen || (this._seen = new Set());
+    seen.clear();
+    for (let cy = Math.floor((y - r) / 4); cy <= Math.floor((y + r) / 4); cy++) {
+      for (let cx = Math.floor((x - r) / 4); cx <= Math.floor((x + r) / 4); cx++) {
+        const list = cells.get(cx * 4096 + cy);
+        if (!list) continue;
+        for (const p of list) if (!seen.has(p)) { seen.add(p); out.push(p); }
+      }
+    }
+    return out;
+  }
+
+  solidCells() {
+    const solids = this.solids();
+    if (this._cells && this._cellsFor === solids) return this._cells;
+    const cells = new Map();
+    for (const p of solids) {
+      const b = p.box;
+      for (let cy = Math.floor(b.y0 / 4); cy <= Math.floor(b.y1 / 4); cy++) {
+        for (let cx = Math.floor(b.x0 / 4); cx <= Math.floor(b.x1 / 4); cx++) {
+          const k = cx * 4096 + cy;
+          let l = cells.get(k);
+          if (!l) cells.set(k, (l = []));
+          l.push(p);
+        }
+      }
+    }
+    this._cells = cells;
+    this._cellsFor = solids;
+    return cells;
+  }
+
   /** Grade de bloqueio (para o campo de fluxo da IA). */
   rebuildBlocked() {
     this.blocked = new Uint8Array(this.W * this.H);
@@ -264,6 +380,9 @@ class Level {
 
   /** Marca só os tiles cobertos por um colisor (rápido mesmo em mapas grandes). */
   markSolid(p) {
+    // Barricadas bloqueiam o corpo mas não o mapa de caminhos: assim a região
+    // inteira conta como "alcançável" ao posicionar moradores e bandidos.
+    if (p.tag && String(p.tag).startsWith('barricade')) return;
     const b = p.box;
     for (let j = Math.max(0, Math.floor(b.y0 - 0.5)); j <= Math.min(this.H - 1, Math.floor(b.y1 + 0.5)); j++) {
       for (let i = Math.max(0, Math.floor(b.x0 - 0.5)); i <= Math.min(this.W - 1, Math.floor(b.x1 + 0.5)); i++) {
@@ -277,7 +396,7 @@ class Level {
     for (let j = Math.max(0, Math.floor(b.y0 - 0.5)); j <= Math.min(this.H - 1, Math.floor(b.y1 + 0.5)); j++) {
       for (let i = Math.max(0, Math.floor(b.x0 - 0.5)); i <= Math.min(this.W - 1, Math.floor(b.x1 + 0.5)); i++) {
         const cx = i + 0.5, cy = j + 0.5;
-        this.blocked[j * this.W + i] = this.solids().some((p) => this.solidDist(p, cx, cy) < 0.3) ? 1 : 0;
+        this.blocked[j * this.W + i] = this.solidsNear(cx, cy, 1).some((p) => this.solidDist(p, cx, cy) < 0.3) ? 1 : 0;
       }
     }
   }
@@ -290,9 +409,7 @@ class Level {
 
   /** Acrescenta um objeto de cenário depois da criação (ex.: montagem dos acampamentos). */
   addProp(type, x, y) {
-    const p = new Prop(type, x, y);
-    p.level = this;
-    this.props.push(p);
+    const p = this.pushProp(new Prop(type, x, y));
     this._solids = null;
     if (p.def.solid !== 'none') this.markSolid(p);
     return p;
@@ -429,12 +546,12 @@ class Level {
 
   isFree(x, y, r) {
     if (x < r || y < r || x > this.W - r || y > this.H - r) return false;
-    return !this.solids().some((p) => this.solidDist(p, x, y) < r + 0.1);
+    return !this.solidsNear(x, y, r + 1).some((p) => this.solidDist(p, x, y) < r + 0.1);
   }
 
   /** Empurra um círculo (ator) para fora dos colisores e dos limites do mapa. */
   resolveCircle(a) {
-    for (const p of this.solids()) {
+    for (const p of this.solidsNear(a.x, a.y, a.radius + 1)) {
       if (p.def.solid === 'box') {
         const b = p.box;
         const cx = clamp(a.x, b.x0, b.x1), cy = clamp(a.y, b.y0, b.y1);
@@ -535,140 +652,189 @@ class Level {
   /* ----------------------------------- chão ----------------------------------- */
 
   /**
-   * Pinta o chão da fase UMA vez num canvas próprio (sem grade de losangos).
-   * O truque: setTransform com a matriz isométrica — assim desenhamos em
-   * coordenadas de MUNDO (retângulos, círculos, traços) e o canvas projeta
-   * tudo em perspectiva sozinho. Desfoque (filter: blur) suaviza as bordas.
+   * Chão em BLOCOS (chunks) de 16×16 tiles, pintados sob demanda e guardados
+   * num cache pequeno: o mapa da região é grande demais para um canvas só.
+   *
+   * Cada bloco usa setTransform com a matriz isométrica, então desenhamos em
+   * coordenadas de MUNDO (retângulos, círculos, traços) e o canvas projeta tudo.
+   * Todos os elementos são desenhados inteiros e recortados ao bloco, por isso
+   * os desfoques (blur) casam sem emenda entre blocos vizinhos.
    */
-  buildGround() {
-    const W = this.W, H = this.H, HW = Iso.HW, HH = Iso.HH, B = BORDER + 2;
-    const st = this.style;
-    const ox = (H + 2 * B) * HW, oy = 2 * B * HH;
-    // Mapas grandes: canvas do chão em resolução menor (memória do celular).
-    const RES = W + H > 80 ? 0.6 : 1;
-    const c = document.createElement('canvas');
-    c.width = Math.ceil((W + H + 4 * B) * HW * RES);
-    c.height = Math.ceil((W + H + 4 * B) * HH * RES);
-    const g = c.getContext('2d');
-    this.gRes = RES;
-    const hsl = (h, sat, l, a = 1) => `hsla(${h}, ${sat}%, ${l}%, ${a})`;
-    const rnd = makeRng(W * 131 + H * 7 + (this.stage.scatter ? this.stage.scatter.seed : 3));
+  prepareGround() {
+    const W = this.W, H = this.H;
+    const rnd = makeRng(W * 131 + H * 7 + (this.stage.seed || 3));
+    // manchas de cor (variação orgânica do capim/terra)
+    this.splotches = [];
+    for (let k = 0; k < 170 * (W * H) / 900; k++) {
+      const x = rnd() * W, y = rnd() * H;
+      this.splotches.push({ x, y, r: 1.2 + rnd() * 3.5, dl: (rnd() - 0.5) * 12, dh: (rnd() - 0.5) * 18, st: this.styleAt(x) });
+    }
+    // pedrinhas ao longo do caminho
+    this.pebbles = [];
+    const pts = this.stage.path, pw = (this.stage.pathWidth || 1.3) * 2;
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [ax, ay] = pts[k], [bx, by] = pts[k + 1];
+      const len = Math.hypot(bx - ax, by - ay) || 1;
+      for (let q = 0; q < len * 4; q++) {
+        const t = rnd(), off = (rnd() - 0.5) * pw * 0.9;
+        const nx = -(by - ay) / len, ny = (bx - ax) / len;
+        this.pebbles.push({ x: ax + (bx - ax) * t + nx * off, y: ay + (by - ay) * t + ny * off, l: rnd(), r: 0.03 + rnd() * 0.05 });
+      }
+    }
+    this.plazaRnd = Math.floor(rnd() * 1e6);
+    this.chunks = new Map();
+    this.chunkRes = TOUCH.active || 'ontouchstart' in window ? 0.7 : 0.85;
+  }
 
-    g.fillStyle = hsl(95, 30, 9);
-    g.fillRect(0, 0, c.width, c.height);
-    g.setTransform(HW * RES, HH * RES, -HW * RES, HH * RES, ox * RES, oy * RES); // daqui em diante: unidades de MUNDO
+  /**
+   * Bloco retangular NO ESPAÇO DA TELA isométrica (CW × CH px), sem sobreposição
+   * entre blocos vizinhos: cada pixel do chão é desenhado uma vez só por quadro.
+   */
+  buildChunk(ix, iy) {
+    const CW = 1024, CH = 512, HW = Iso.HW, HH = Iso.HH, R = this.chunkRes;
+    const W = this.W, H = this.H;
+    const X0 = ix * CW, Y0 = iy * CH;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(CW * R);
+    c.height = Math.ceil(CH * R);
+    const g = c.getContext('2d');
+    const hsl = (h, sat, l, a = 1) => `hsla(${h}, ${sat}%, ${l}%, ${a})`;
+    g.setTransform(HW * R, HH * R, -HW * R, HH * R, -X0 * R, -Y0 * R);
     g.lineCap = 'round';
     g.lineJoin = 'round';
+    // retângulo do mundo que cobre o bloco
+    const cs = [Iso.toWorld(X0, Y0), Iso.toWorld(X0 + CW, Y0), Iso.toWorld(X0, Y0 + CH), Iso.toWorld(X0 + CW, Y0 + CH)];
+    const cx0 = Math.min(...cs.map((q) => q.x)), cy0 = Math.min(...cs.map((q) => q.y));
+    const C = Math.max(Math.max(...cs.map((q) => q.x)) - cx0, Math.max(...cs.map((q) => q.y)) - cy0);
+    const near = (x, y, m) => x > cx0 - m && x < cx0 + C + m && y > cy0 - m && y < cy0 + C + m;
+    const bx0 = cx0 - 4, by0 = cy0 - 4, bw = C + 8;
 
-    // Mata ao redor: claridade diminuindo para longe do mapa.
+    // fundo: chão de mata, mais escuro longe do mapa
+    g.fillStyle = hsl(95, 30, 9);
+    g.fillRect(bx0, by0, bw, bw);
     g.filter = 'blur(24px)';
     g.fillStyle = hsl(92, 30, 16);
     g.fillRect(-5, -5, W + 10, H + 10);
     g.filter = 'blur(12px)';
     g.fillStyle = hsl(92, 30, 20);
     g.fillRect(-1.5, -1.5, W + 3, H + 3);
-    // Base do mapa com borda macia.
-    g.filter = 'blur(8px)';
-    g.fillStyle = hsl(st.base[0], st.base[1], st.base[2]);
-    g.fillRect(-0.2, -0.2, W + 0.4, H + 0.4);
-    g.filter = 'none';
-
-    // Manchas de cor (variação orgânica do capim/terra).
-    for (let k = 0; k < 170 * (W * H) / 900; k++) {
-      const x = rnd() * W, y = rnd() * H, r = 1.2 + rnd() * 3.5;
-      const dl = (rnd() - 0.5) * 12, dh = (rnd() - 0.5) * 18;
-      const gr = g.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, hsl(st.base[0] + dh, st.base[1] + 4, st.base[2] + dl, 0.35));
-      gr.addColorStop(1, hsl(st.base[0] + dh, st.base[1] + 4, st.base[2] + dl, 0));
-      g.fillStyle = gr;
-      g.fillRect(x - r, y - r, r * 2, r * 2);
+    // base de cada zona (as cores se misturam nas divisas)
+    const zones = this.zones || [{ x0: 0, x1: W, ground: this.stage.ground || 'village' }];
+    g.filter = 'blur(10px)';
+    for (const z of zones) {
+      if (z.x1 < cx0 - 6 || z.x0 > cx0 + C + 6) continue;
+      const st = GROUND_STYLES[z.ground] || this.style;
+      g.fillStyle = hsl(st.base[0], st.base[1], st.base[2]);
+      g.fillRect(Math.max(-0.2, z.x0 - 1), -0.2, Math.min(W + 0.2, z.x1 + 1) - Math.max(-0.2, z.x0 - 1), H + 0.4);
     }
-
-    // Caminho de terra: sombra desfocada + leito + faixa gasta no meio.
-    const P = st.path;
+    g.filter = 'none';
+    // manchas
+    for (const sp of this.splotches) {
+      if (!near(sp.x, sp.y, sp.r + 1)) continue;
+      const st = sp.st;
+      const gr = g.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, sp.r);
+      gr.addColorStop(0, hsl(st.base[0] + sp.dh, st.base[1] + 4, st.base[2] + sp.dl, 0.35));
+      gr.addColorStop(1, hsl(st.base[0] + sp.dh, st.base[1] + 4, st.base[2] + sp.dl, 0));
+      g.fillStyle = gr;
+      g.fillRect(sp.x - sp.r, sp.y - sp.r, sp.r * 2, sp.r * 2);
+    }
+    // caminho e trilhas (só os trechos que passam perto do bloco)
+    const P = this.styleAt(cx0 + C / 2).path;
     for (const [pts, half] of this.lines()) {
+      const segs = [];
+      for (let k = 0; k < pts.length - 1; k++) {
+        const [ax, ay] = pts[k], [bx, by] = pts[k + 1];
+        if (Math.max(ax, bx) < cx0 - 4 || Math.min(ax, bx) > cx0 + C + 4 || Math.max(ay, by) < cy0 - 4 || Math.min(ay, by) > cy0 + C + 4) continue;
+        segs.push(k);
+      }
+      if (!segs.length) continue;
       const pw = half * 2;
-      const path = () => {
+      const draw = () => {
         g.beginPath();
-        pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+        for (const k of segs) {
+          g.moveTo(pts[k][0], pts[k][1]);
+          g.lineTo(pts[k + 1][0], pts[k + 1][1]);
+        }
       };
       g.filter = 'blur(6px)';
-      path(); g.strokeStyle = hsl(P[0], P[1], P[2] - 6, 0.6); g.lineWidth = pw + 0.9; g.stroke();
+      draw(); g.strokeStyle = hsl(P[0], P[1], P[2] - 6, 0.6); g.lineWidth = pw + 0.9; g.stroke();
       g.filter = 'blur(2px)';
-      path(); g.strokeStyle = hsl(P[0], P[1], P[2]); g.lineWidth = pw; g.stroke();
+      draw(); g.strokeStyle = hsl(P[0], P[1], P[2]); g.lineWidth = pw; g.stroke();
       g.filter = 'blur(5px)';
-      path(); g.strokeStyle = hsl(P[0], P[1] - 4, P[2] + 6, 0.5); g.lineWidth = pw * 0.4; g.stroke();
+      draw(); g.strokeStyle = hsl(P[0], P[1] - 4, P[2] + 6, 0.5); g.lineWidth = pw * 0.4; g.stroke();
       g.filter = 'none';
     }
-    // pedrinhas e marcas de roda ao longo do caminho
-    const pts = this.stage.path;
-    const pw = (this.stage.pathWidth || 1.3) * 2;
-    for (let k = 0; k < pts.length - 1; k++) {
-      const [ax, ay] = pts[k], [bx, by] = pts[k + 1];
-      const len = Math.hypot(bx - ax, by - ay);
-      for (let q = 0; q < len * 4; q++) {
-        const t = rnd(), off = (rnd() - 0.5) * pw * 0.9;
-        const nx = -(by - ay) / len, ny = (bx - ax) / len;
-        const x = ax + (bx - ax) * t + nx * off, y = ay + (by - ay) * t + ny * off;
-        g.fillStyle = hsl(P[0], 10, P[2] - 10 + rnd() * 18, 0.7);
-        g.beginPath();
-        g.arc(x, y, 0.03 + rnd() * 0.05, 0, Math.PI * 2);
-        g.fill();
-      }
+    for (const pb of this.pebbles) {
+      if (!near(pb.x, pb.y, 0.2)) continue;
+      g.fillStyle = hsl(P[0], 10, P[2] - 10 + pb.l * 18, 0.7);
+      g.beginPath();
+      g.arc(pb.x, pb.y, pb.r, 0, Math.PI * 2);
+      g.fill();
     }
-
-    // Praças: lajes de pedra assentadas em fiadas desencontradas.
-    const S = st.stone;
-    for (const [cx, cy, r] of this.stage.plazas || []) {
-      if (this.stage.mosaic) {
-        drawMosaic(g, cx, cy, r, rnd);
-        continue;
-      }
+    // praças: lajes de pedra ou o mosaico cerimonial (santuário)
+    for (const [px, py, r, kind] of this.stage.plazas || []) {
+      if (!near(px, py, r + 2)) continue;
+      const rnd = makeRng(this.plazaRnd + Math.round(px * 31 + py * 7));
+      const st = this.styleAt(px);
+      if (kind === 'mosaic' || (this.stage.mosaic && !this.zones)) { drawMosaic(g, px, py, r, rnd); continue; }
+      const S = st.stone;
       g.filter = 'blur(5px)';
       g.fillStyle = hsl(S[0], S[1], S[2] - 12, 0.7);
-      g.beginPath(); g.arc(cx, cy, r + 0.3, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(px, py, r + 0.3, 0, Math.PI * 2); g.fill();
       g.filter = 'none';
       g.save();
-      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.clip();
+      g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.clip();
       g.fillStyle = hsl(S[0], S[1], S[2] - 14);
-      g.fillRect(cx - r, cy - r, r * 2, r * 2);
-      for (let y = cy - r, row = 0; y < cy + r; y += 0.72, row++) {
-        for (let x = cx - r - (row % 2) * 0.5; x < cx + r; x += 1.0) {
+      g.fillRect(px - r, py - r, r * 2, r * 2);
+      for (let y = py - r, row = 0; y < py + r; y += 0.72, row++) {
+        for (let x = px - r - (row % 2) * 0.5; x < px + r; x += 1.0) {
           g.fillStyle = hsl(S[0] + (rnd() - 0.5) * 8, S[1], S[2] - 4 + rnd() * 9);
           g.fillRect(x + 0.04, y + 0.04, 0.92, 0.64);
         }
       }
       g.restore();
-      // musgo nas bordas
       g.filter = 'blur(4px)';
       g.strokeStyle = hsl(st.base[0], st.base[1], st.base[2] + 2, 0.55);
       g.lineWidth = 0.35;
-      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.stroke();
       g.filter = 'none';
     }
-
-    this.groundCanvas = c;
-    this.gOx = ox;
-    this.gOy = oy;
+    return c;
   }
 
   drawGround(ctx, cam, time) {
-    if (!this.groundCanvas) this.buildGround();
-    const c = this.groundCanvas, s = cam.scale, R = this.gRes;
-    const p0 = cam.worldToScreen(0, 0);
-    const dx = p0.x - this.gOx * s, dy = p0.y - this.gOy * s;
-    const k = s / R; // px de tela por px do canvas do chão
-    // Desenha só o pedaço visível do canvas do chão.
-    const sx0 = Math.max(0, -dx / k), sy0 = Math.max(0, -dy / k);
-    const sx1 = Math.min(c.width, (cam.viewW - dx) / k), sy1 = Math.min(c.height, (cam.viewH - dy) / k);
-    if (sx1 > sx0 && sy1 > sy0) {
-      ctx.drawImage(c, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 * k, dy + sy0 * k, (sx1 - sx0) * k, (sy1 - sy0) * k);
+    if (!this.chunks) this.prepareGround();
+    const CW = 1024, CH = 512, s = cam.scale;
+    const cs = [cam.screenToWorld(0, 0), cam.screenToWorld(cam.viewW, 0), cam.screenToWorld(0, cam.viewH), cam.screenToWorld(cam.viewW, cam.viewH)];
+    const wx0 = Math.min(...cs.map((q) => q.x)), wx1 = Math.max(...cs.map((q) => q.x));
+    const wy0 = Math.min(...cs.map((q) => q.y)), wy1 = Math.max(...cs.map((q) => q.y));
+    // retângulo visível em coordenadas iso (px com zoom 1)
+    const vx0 = cam.x - (cam.viewW / 2 + cam.offX) / s, vy0 = cam.y - (cam.viewH / 2 + cam.offY) / s;
+    const vx1 = vx0 + cam.viewW / s, vy1 = vy0 + cam.viewH / s;
+    this.chunkTick = (this.chunkTick || 0) + 1;
+    for (let iy = Math.floor(vy0 / CH); iy <= Math.floor(vy1 / CH); iy++) {
+      for (let ix = Math.floor(vx0 / CW); ix <= Math.floor(vx1 / CW); ix++) {
+        const key = ix * 10000 + iy;
+        let e = this.chunks.get(key);
+        if (!e) {
+          e = { c: this.buildChunk(ix, iy) };
+          this.chunks.set(key, e);
+        }
+        e.used = this.chunkTick;
+        const sx = (ix * CW - cam.x) * s + cam.viewW / 2 + cam.offX;
+        const sy = (iy * CH - cam.y) * s + cam.viewH / 2 + cam.offY;
+        ctx.drawImage(e.c, Math.floor(sx), Math.floor(sy), Math.ceil(CW * s) + 1, Math.ceil(CH * s) + 1);
+      }
+    }
+    // cache: no máximo ~28 blocos (memória)
+    if (this.chunks.size > 28) {
+      const old = [...this.chunks.entries()].sort((a, b) => a[1].used - b[1].used);
+      for (let k = 0; k < this.chunks.size - 28; k++) this.chunks.delete(old[k][0]);
     }
     // Detalhes animados (capim balançando, pétalas) por cima, só nos tiles visíveis.
-    const m = Iso.HW * 2 * s, B = 4;
-    const cs = [cam.screenToWorld(0, 0), cam.screenToWorld(cam.viewW, 0), cam.screenToWorld(0, cam.viewH), cam.screenToWorld(cam.viewW, cam.viewH)];
-    const i0 = Math.max(-B, Math.floor(Math.min(...cs.map((q) => q.x))) - 1), i1 = Math.min(this.W + B, Math.ceil(Math.max(...cs.map((q) => q.x))) + 1);
-    const j0 = Math.max(-B, Math.floor(Math.min(...cs.map((q) => q.y))) - 1), j1 = Math.min(this.H + B, Math.ceil(Math.max(...cs.map((q) => q.y))) + 1);
+    const m = Iso.HW * 2 * s;
+    const i0 = Math.max(-4, Math.floor(wx0) - 1), i1 = Math.min(this.W + 4, Math.ceil(wx1) + 1);
+    const j0 = Math.max(-4, Math.floor(wy0) - 1), j1 = Math.min(this.H + 4, Math.ceil(wy1) + 1);
     for (let j = j0; j < j1; j++) {
       for (let i = i0; i < i1; i++) {
         const n = hash2(i, j);
@@ -677,7 +843,7 @@ class Level {
         if (top.x < -m || top.x > cam.viewW + m || top.y < -m || top.y > cam.viewH + m) continue;
         const outside = i < 0 || j < 0 || i >= this.W || j >= this.H;
         if (outside) { if (n > 0.7) this.drawDeco(ctx, cam, i, j, n, 'leaves', time); continue; }
-        if (this.tiles[j * this.W + i] === T_GRASS) this.drawDeco(ctx, cam, i, j, n, this.style.deco, time);
+        if (this.tiles[j * this.W + i] === T_GRASS) this.drawDeco(ctx, cam, i, j, n, this.styleAt(i).deco, time);
       }
     }
   }

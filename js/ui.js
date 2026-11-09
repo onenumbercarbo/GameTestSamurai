@@ -52,7 +52,7 @@ const UI = {
 
   hud(ctx, w) {
     const cam = w.camera;
-    if (w.cutscene) return;
+    if (w.cutscene || w.dialog) return;
     const p = w.player;
     const top = 18 + cam.viewH * 0.1 * cam.letterbox;
     // Vida e dash
@@ -78,14 +78,14 @@ const UI = {
     ctx.textAlign = 'center';
     ctx.font = `700 15px ${FONT_TITLE}`;
     ctx.fillStyle = 'rgba(243,233,216,0.85)';
-    ctx.fillText(w.stage.name, cam.viewW / 2, top + 10);
+    ctx.fillText(w.zone.name, cam.viewW / 2, top + 10);
     ctx.font = `500 12px ${FONT_UI}`;
     ctx.fillStyle = 'rgba(243,233,216,0.65)';
     ctx.fillText(w.objectiveText(), cam.viewW / 2, top + 30);
-    const danger = (w.villagers || []).filter((v) => !v.freed).length;
+    const danger = (w.villagers || []).filter((v) => !v.freed && v.zone === w.zone.index).length;
     if (danger) {
       ctx.fillStyle = `rgba(255,190,150,${0.7 + 0.3 * Math.sin(w.time * 4)})`;
-      ctx.fillText(`Aldeões em perigo nesta vila: ${danger}`, cam.viewW / 2, top + 48);
+      ctx.fillText(`Aldeões em perigo aqui: ${danger}`, cam.viewW / 2, top + 48);
     }
 
     // Combo
@@ -104,7 +104,7 @@ const UI = {
     }
 
     // Barra do boss
-    const b = w.boss;
+    const b = w.fightBoss;
     if (b && w.bossFight && b.alive) {
       const bw = Math.min(560, cam.viewW - (TOUCH.active ? 380 : 80));
       const x = (cam.viewW - bw) / 2, y = cam.viewH - 46 - cam.viewH * 0.1 * cam.letterbox;
@@ -118,8 +118,9 @@ const UI = {
     }
 
     // Seta para o portão quando ele está fora da tela
-    if (w.exitOpen && w.stage.exit) {
-      const e = cam.worldToScreen(w.stage.exit[0], w.stage.exit[1], 40);
+    const target = !w.dialog && !w.cutscene && w.objectivePoint && w.objectivePoint();
+    if (target) {
+      const e = cam.worldToScreen(target.x, target.y, 40);
       const m = 60;
       if (e.x < m || e.x > cam.viewW - m || e.y < m || e.y > cam.viewH - m) {
         const cx = cam.viewW / 2, cy = cam.viewH / 2;
@@ -145,7 +146,7 @@ const UI = {
 
   banner(ctx, w) {
     const b = w.banner;
-    if (!b) return;
+    if (!b || w.dialog) return;
     const cam = w.camera;
     const k = b.t / b.dur;
     const a = Math.min(1, b.t / 0.25, (b.dur - b.t) / 0.4);
@@ -403,24 +404,16 @@ const UI = {
    * Tesouros e emboscadas aparecem quando entram na área explorada.
    */
   minimap(ctx, w) {
-    if (w.cutscene) return;
+    if (w.cutscene || w.dialog) return;
     const cam = w.camera, L = w.level;
-    const size = TOUCH.active ? Math.min(130, cam.viewW * 0.18) : Math.min(190, cam.viewW * 0.22);
-    const hw = size / (L.W + L.H), hh = hw / 2;
-    const ox = cam.viewW - 18 - size / 2;
-    const oy = TOUCH.active
-      ? 64 + cam.viewH * 0.1 * cam.letterbox // no celular: canto superior (os botões ocupam a parte de baixo)
-      : cam.viewH - 18 - (L.W + L.H) * hh - cam.viewH * 0.1 * cam.letterbox;
-    const pt = (x, y) => ({ x: ox + (x - y) * hw, y: oy + (x + y) * hh });
-    // Base pré-desenhada uma vez por fase.
-    if (!L.miniCanvas || L.miniHw !== hw) {
-      const dpr = 2;
+    const k = 2.2; // px por meio-tile
+    const lp = (x, y) => ({ x: (x - y + L.H) * k, y: (x + y) * k * 0.5 });
+    // Mapa base da região inteira (uma vez) + névoa (atualizada aos poucos).
+    if (!L.mini) {
       const c = document.createElement('canvas');
-      c.width = Math.ceil(size * dpr) + 4;
-      c.height = Math.ceil((L.W + L.H) * hh * dpr) + 4;
+      c.width = Math.ceil((L.W + L.H) * k) + 2;
+      c.height = Math.ceil((L.W + L.H) * k * 0.5) + 2;
       const g = c.getContext('2d');
-      g.scale(dpr, dpr);
-      const lp = (x, y) => ({ x: size / 2 + (x - y) * hw, y: (x + y) * hh });
       for (let j = 0; j < L.H; j++) {
         for (let i = 0; i < L.W; i++) {
           const t = L.tiles[j * L.W + i];
@@ -429,30 +422,19 @@ const UI = {
           g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(c2.x, c2.y); g.lineTo(d.x, d.y); g.closePath(); g.fill();
         }
       }
-      L.miniCanvas = c;
-      L.miniHw = hw;
-    }
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.drawImage(L.miniCanvas, ox - size / 2, oy, L.miniCanvas.width / 2, L.miniCanvas.height / 2);
-    // Névoa nos tiles não explorados: canvas próprio, só "apaga" os tiles recém-vistos.
-    if (!L.fogCanvas || L.fogHw !== hw) {
+      L.mini = c;
       const f = document.createElement('canvas');
-      f.width = L.miniCanvas.width;
-      f.height = L.miniCanvas.height;
-      const g = f.getContext('2d');
-      g.scale(2, 2);
-      g.fillStyle = 'rgba(12,10,8,0.92)';
-      g.fillRect(0, 0, f.width, f.height);
-      L.fogCanvas = f;
-      L.fogHw = hw;
+      f.width = c.width;
+      f.height = c.height;
+      const fg = f.getContext('2d');
+      fg.fillStyle = 'rgba(12,10,8,0.93)';
+      fg.fillRect(0, 0, f.width, f.height);
+      L.fog = f;
       L.fogDone = new Uint8Array(L.W * L.H);
     }
     {
-      const g = L.fogCanvas.getContext('2d');
-      const lp = (x, y) => ({ x: size / 2 + (x - y) * hw, y: (x + y) * hh });
+      const g = L.fog.getContext('2d');
       g.save();
-      g.setTransform(2, 0, 0, 2, 0, 0);
       g.globalCompositeOperation = 'destination-out';
       g.beginPath();
       let any = false;
@@ -467,12 +449,23 @@ const UI = {
       if (any) g.fill();
       g.restore();
     }
-    ctx.drawImage(L.fogCanvas, ox - size / 2, oy, L.fogCanvas.width / 2, L.fogCanvas.height / 2);
-    // Contorno
-    const n = pt(0, 0), e = pt(L.W, 0), s2 = pt(L.W, L.H), wv = pt(0, L.H);
-    ctx.strokeStyle = 'rgba(243,233,216,0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(n.x, n.y); ctx.lineTo(e.x, e.y); ctx.lineTo(s2.x, s2.y); ctx.lineTo(wv.x, wv.y); ctx.closePath(); ctx.stroke();
+    // Janela em volta do jogador.
+    const bw = TOUCH.active ? 160 : 210, bh = Math.round(bw * 0.6);
+    const bx = cam.viewW - 16 - bw;
+    const by = TOUCH.active ? 60 + cam.viewH * 0.1 * cam.letterbox : cam.viewH - 16 - bh - cam.viewH * 0.1 * cam.letterbox;
+    const pp = lp(w.player.x, w.player.y);
+    const ox = bx + bw / 2 - pp.x, oy = by + bh / 2 - pp.y;
+    const pt = (x, y) => { const q = lp(x, y); return { x: ox + q.x, y: oy + q.y }; };
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bx, by, bw, bh);
+    ctx.fillStyle = 'rgba(12,10,8,0.85)';
+    ctx.fill();
+    ctx.clip();
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(L.mini, ox, oy);
+    ctx.drawImage(L.fog, ox, oy);
+    ctx.globalAlpha = 1;
     const seen = (x, y) => w.explored[clamp(Math.floor(y), 0, L.H - 1) * L.W + clamp(Math.floor(x), 0, L.W - 1)];
     const dot = (x, y, r, color) => {
       const q = pt(x, y);
@@ -486,22 +479,67 @@ const UI = {
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(q.x - 4, q.y - 4); ctx.lineTo(q.x + 4, q.y + 4); ctx.moveTo(q.x + 4, q.y - 4); ctx.lineTo(q.x - 4, q.y + 4); ctx.stroke();
     }
-    for (const c of w.chests) {
-      if (!c.opened && seen(c.x, c.y)) dot(c.x, c.y, 3.5 + Math.sin(w.time * 5), c.locked ? '#d08a50' : '#ffcf6a');
+    for (const c of w.chests) if (!c.opened && seen(c.x, c.y)) dot(c.x, c.y, 3.2 + Math.sin(w.time * 5) * 0.8, c.locked ? '#d08a50' : '#ffcf6a');
+    for (const v of w.villagers) if (!v.freed && seen(v.x, v.y)) dot(v.x, v.y, 2.6, '#7fd0ff');
+    for (const t of w.townsfolk) if (t.greeter && !t.zone.talked) dot(t.x, t.y, 3.5, '#ffe9a8');
+    // barricadas ainda de pé
+    for (const [jx, jy, zi] of w.stage.junctions) {
+      if (zi < 0 || w.zones[zi].done) continue;
+      const q = pt(jx, jy);
+      ctx.fillStyle = '#c8322b';
+      ctx.fillRect(q.x - 5, q.y - 2, 10, 4);
     }
-    if (w.stage.exit) {
-      const q = pt(w.stage.exit[0], w.stage.exit[1]);
-      ctx.fillStyle = w.exitOpen ? '#ffcf6a' : '#c8322b';
-      ctx.fillRect(q.x - 4, q.y - 5, 8, 2);
-      ctx.fillRect(q.x - 3, q.y - 5, 1.5, 7);
-      ctx.fillRect(q.x + 1.5, q.y - 5, 1.5, 7);
-    }
-    for (const v of w.villagers || []) if (!v.freed && seen(v.x, v.y)) dot(v.x, v.y, 2.6, '#7fd0ff');
-    for (const en of w.enemies) if (en.alive && en.state !== 'camp') dot(en.x, en.y, 2, '#ff5a4a');
-    if (w.boss && w.boss.alive) dot(w.boss.x, w.boss.y, 3.5, '#ff2a1a');
+    for (const en of w.enemies) if (en.alive && en.state !== 'camp' && Math.abs(en.x - w.player.x) < 30) dot(en.x, en.y, 2, '#ff5a4a');
+    for (const b of w.bosses) if (b.alive && seen(b.x, b.y)) dot(b.x, b.y, 3.5, '#ff2a1a');
     dot(w.player.x, w.player.y, 3, '#ffffff');
     ctx.restore();
+    ctx.strokeStyle = 'rgba(243,233,216,0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
   },
+
+  /** Caixa de diálogo na parte de baixo da tela (texto datilografado). */
+  dialog(ctx, w) {
+    const D = w.dialog;
+    if (!D) return;
+    const cam = w.camera;
+    const [speaker, text] = D.lines[D.i];
+    const bw = Math.min(760, cam.viewW - 32), x = (cam.viewW - bw) / 2;
+    const k = clamp(cam.viewH / 720, 0.75, 1);
+    ctx.font = `400 ${Math.round(19 * k)}px ${FONT_TITLE}`;
+    const lines = this.wrap(ctx, text, bw - 48);
+    const bh = 54 * k + lines.length * 27 * k;
+    const y = cam.viewH - bh - 18 - cam.viewH * 0.1 * cam.letterbox;
+    ctx.save();
+    ctx.fillStyle = 'rgba(14,10,8,0.9)';
+    ctx.strokeStyle = 'rgba(200,50,43,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, bw, bh, 8) : ctx.rect(x, y, bw, bh);
+    ctx.fill();
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.font = `700 ${Math.round(14 * k + 1)}px ${FONT_UI}`;
+    ctx.fillStyle = speaker === 'Rōnin' ? '#ff8a70' : '#ffcf6a';
+    ctx.fillText(speaker, x + 24, y + 28 * k);
+    ctx.font = `400 ${Math.round(19 * k)}px ${FONT_TITLE}`;
+    ctx.fillStyle = '#f3e9d8';
+    let shown = Math.floor(D.t * 45);
+    lines.forEach((l, i) => {
+      if (shown <= 0) return;
+      ctx.fillText(l.slice(0, shown), x + 24, y + 28 * k + 30 * k + i * 27 * k);
+      shown -= l.length + 1;
+    });
+    if (D.t * 45 >= text.length) {
+      ctx.textAlign = 'right';
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(D.t * 5);
+      ctx.font = `600 12px ${FONT_UI}`;
+      ctx.fillStyle = '#ffcf6a';
+      ctx.fillText(TOUCH.active ? 'toque ▼' : 'Enter / clique ▼', x + bw - 18, y + bh - 12);
+    }
+    ctx.restore();
+  },
+
 
   gameOver(ctx, cam, t) {
     this.panel(ctx, cam, Math.min(0.75, t * 0.8));

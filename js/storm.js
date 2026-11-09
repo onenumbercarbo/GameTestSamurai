@@ -225,6 +225,7 @@ class Storm {
   /** A tempestade passa (após derrotar o Gendō). */
   calm() {
     this.target = 0.15;
+    this.calmed = true;
   }
 
   /** Relâmpago: clarão, raio no céu e trovão logo depois. */

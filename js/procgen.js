@@ -68,19 +68,26 @@ const ProcGen = (() => {
     const between = (a, b) => a + rnd() * (b - a);
     const pick = (list) => list[Math.floor(rnd() * list.length)];
 
-    // 1. Caminho com curvas: base na diagonal oeste→leste, desvios perpendiculares.
-    const start = [between(2.2, 3.5), H - between(2.2, 3.5)];
-    const end = [W - between(2.6, 3.4), between(2.6, 3.4)];
-    const path = [[start[0] - 1.5, start[1] + 1.5], start];
+    // 1. Caminho com curvas. Modo "faixa" (região contínua): entra pela borda oeste
+    // (x = 0) na altura startY e sai pela borda leste na altura endY.
+    const band = tpl.startY !== undefined;
+    const start = band ? [0.6, tpl.startY] : [between(2.2, 3.5), H - between(2.2, 3.5)];
+    const end = band ? [W - 0.6, tpl.endY] : [W - between(2.6, 3.4), between(2.6, 3.4)];
+    const path = band ? [start] : [[start[0] - 1.5, start[1] + 1.5], start];
     const n = Math.round(5 * L);
     for (let k = 1; k <= n; k++) {
       const t = k / (n + 1);
-      const off = (rnd() - 0.5) * 7.5 * Math.min(2.2, L); // desvio perpendicular (ao longo de (1,1)/√2)
-      const x = start[0] + (end[0] - start[0]) * t + off * Math.SQRT1_2;
-      const y = start[1] + (end[1] - start[1]) * t + off * Math.SQRT1_2;
-      path.push([clamp(x, 3, W - 3), clamp(y, 3, H - 3)]);
+      const off = (rnd() - 0.5) * 7.5 * Math.min(2.2, L);
+      // desvio perpendicular: na faixa, em y; na vila isolada, ao longo de (1,1)/√2
+      const x = start[0] + (end[0] - start[0]) * t + (band ? 0 : off * Math.SQRT1_2);
+      const y = start[1] + (end[1] - start[1]) * t + (band ? off * 1.3 : off * Math.SQRT1_2);
+      path.push([clamp(x, 3, W - 3), clamp(y, 6, H - 6)]);
     }
-    path.push(end, [end[0] + 1.5, end[1] - 1.5]);
+    path.push(end);
+    if (!band) path.push([end[0] + 1.5, end[1] - 1.5]);
+    const sideOf = (x, y) => band
+      ? y < start[1] + (end[1] - start[1]) * (x / W)
+      : x + y < (W + H) / 2 - 2;
     const exit = [end[0], end[1] + 0.2];
 
     // 2. Emboscadas no caminho (grupos do modelo, em ciclo).
@@ -108,8 +115,7 @@ const ProcGen = (() => {
       let best = null, bestScore = -1;
       for (let k = 0; k < 160 * A; k++) {
         const x = between(4.5, W - 4.5), y = between(4.5, H - 4.5);
-        const side = x + y < (W + H) / 2 - 2;
-        if (side !== north) continue;
+        if (sideOf(x, y) !== north) continue;
         if (waves.some((wv) => Math.hypot(wv.center[0] - x, wv.center[1] - y) < 9)) continue;
         if (boss && Math.hypot(boss.center[0] - x, boss.center[1] - y) < 12) continue;
         const d = distToPath(path, x, y);
@@ -270,7 +276,7 @@ const ProcGen = (() => {
     };
   }
 
-  return { generate };
+  return { generate, pointAt };
 })();
 
 /** Monta a fase `index`: gerada (com semente) ou a versão fixa (boss). */

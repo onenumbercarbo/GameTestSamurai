@@ -128,7 +128,10 @@ class Actor {
     // balanço e inclinação ao andar
     const sp = Math.hypot(this.vx, this.vy);
     const moving = sp > 0.3 && !opts.still;
-    const bob = moving && !opts.cycle ? Math.abs(Math.sin(this.stride * Math.PI * 0.95)) * 2.6 * Math.min(1, sp / 4) : 0;
+    // balanço vertical: dois "passos" por ciclo de 8 quadros (sincronizado com as pernas)
+    const bob = moving
+      ? Math.abs(Math.sin(opts.cycle ? (this.stride * 2.6 / 8) * Math.PI * 2 : this.stride * Math.PI * 0.95)) * 2.4 * Math.min(1, sp / 4)
+      : 0;
     const screenVx = (this.vx - this.vy); // componente X de tela da velocidade
     this._lean = damp(this._lean, moving ? clamp(screenVx / 12, -0.07, 0.07) : 0, 10, dt || 1);
 
